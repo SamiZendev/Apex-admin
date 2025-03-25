@@ -7,11 +7,12 @@ import {
 import { Request, Response } from "express";
 import axios from "axios";
 import { IGHLSubaccountAuth } from "@/types/IGhlSubaccountAuth";
-import { GHL_SUBACCOUNT_AUTH_ATTRIBUTES } from "../constants/tableAttributes";
+import { GHL_ACCOUNT_DETAILS, GHL_SUBACCOUNT_AUTH_ATTRIBUTES } from "../constants/tableAttributes";
 import {
   GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE,
   SUPABASE_TABLE_NAME,
 } from "../utils/constant";
+import { fetchSubaccountInformation } from "./ghlController";
 
 const generateAccessToken = async (
   data: any
@@ -55,15 +56,15 @@ const generateAccessToken = async (
     );
 
     const insert: IGHLSubaccountAuth = {
-      ghl_location_id: locationId || "",
-      ghl_company_id: companyId,
-      access_token: response?.data?.access_token,
-      refresh_token: response?.data?.refresh_token,
-      expires_in: response?.data?.expires_in,
-      account_type: locationId
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID]: locationId || "",
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_COMPANY_ID]: companyId,
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCESS_TOKEN]: response?.data?.access_token,
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.REFRESH_TOKEN]: response?.data?.refresh_token,
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.EXPIRES_IN]: response?.data?.expires_in,
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE]: locationId
         ? GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE.LOCATION
         : GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE.COMPANY,
-      isActive: true,
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.IS_ACTIVE]: true,
     };
 
     let isExist = false,
@@ -88,9 +89,26 @@ const generateAccessToken = async (
         SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
         insert
       );
+      
+      const subaccount = await fetchSubaccountInformation(locationId);
+      const accountDetails = {
+        [GHL_ACCOUNT_DETAILS.AUTH_ID]: supabaseResponse?.responseData?.[0]?.id,
+        [GHL_ACCOUNT_DETAILS.PHONE]: subaccount?.location?.phone || "",
+        [GHL_ACCOUNT_DETAILS.NAME]: subaccount?.location?.name || "",
+        [GHL_ACCOUNT_DETAILS.EMAIL]: subaccount?.location?.email || "",
+      };
+      
+      const responseAccountDetails = await insertData(
+        SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS,
+        accountDetails
+      );
+      
+      if (!responseAccountDetails?.success) {
+        console.log("responseAccountDetails install webhook",responseAccountDetails)
+      } 
     }
 
-    console.log("supabaseResponse", supabaseResponse);
+    console.log("supabaseResponse install webhook", supabaseResponse);
 
     if (!supabaseResponse.success) {
       return { success: false, message: "Failed to save API response." };
@@ -112,7 +130,7 @@ const changeAccountStatus = async (
     let supabaseResponse;
 
     const update = {
-      isActive: false,
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.IS_ACTIVE]: false,
     };
 
     if (locationId) {
@@ -146,7 +164,7 @@ const changeAccountStatus = async (
       }
     }
 
-    console.log("supabaseResponse", supabaseResponse);
+    console.log("supabaseResponse uninstall webhook", supabaseResponse);
 
     if (!supabaseResponse) {
       return { success: false, message: "Failed to save API response." };

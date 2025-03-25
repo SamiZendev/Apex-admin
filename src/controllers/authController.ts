@@ -7,12 +7,19 @@ import {
   supabase,
   updateData,
 } from "../services/supabaseClient";
-import { IGHLSubaccountAuth } from "@/types/IGhlSubaccountAuth";
+import { IGHLSubaccountAuth } from "../types/IGhlSubaccountAuth";
 import {
   GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE,
   SUPABASE_TABLE_NAME,
 } from "../utils/constant";
-import { GHL_SUBACCOUNT_AUTH_ATTRIBUTES } from "../constants/tableAttributes";
+import {
+  GHL_ACCOUNT_DETAILS,
+  GHL_SUBACCOUNT_AUTH_ATTRIBUTES,
+} from "../constants/tableAttributes";
+import {
+  fetchCompanyInformation,
+  fetchSubaccountInformation,
+} from "./ghlController";
 
 const clientId = process.env.CLIENT_ID;
 const clientSecret = process.env.CLIENT_SECRET;
@@ -20,7 +27,7 @@ const baseURL = process.env.BASE_URL;
 const redirectURI = "http://localhost:3000/oauth/callback";
 
 export const initiateAuth = (req: Request, res: Response) => {
-  const authUrl = `${baseURL}/oauth/chooselocation?response_type=code&redirect_uri=${redirectURI}&client_id=${clientId}&scope=calendars.readonly calendars.write calendars/events.readonly calendars/events.write calendars/groups.readonly calendars/groups.write calendars/resources.readonly calendars/resources.write contacts.readonly contacts.write locations.readonly`;
+  const authUrl = `${baseURL}/oauth/chooselocation?response_type=code&redirect_uri=${redirectURI}&client_id=${clientId}&scope=calendars.readonly calendars.write calendars/events.readonly calendars/events.write calendars/groups.readonly calendars/groups.write calendars/resources.readonly calendars/resources.write contacts.readonly contacts.write locations.readonly companies.readonly`;
   res.redirect(authUrl);
 };
 
@@ -49,15 +56,17 @@ export const callback = async (req: Request, res: Response) => {
     const companyId = response?.data?.companyId;
 
     const data: IGHLSubaccountAuth = {
-      ghl_location_id: locationId || "",
-      ghl_company_id: companyId || "",
-      access_token: response?.data?.access_token,
-      refresh_token: response?.data?.refresh_token,
-      expires_in: response?.data?.expires_in,
-      account_type: locationId
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID]: locationId || "",
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_COMPANY_ID]: companyId || "",
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCESS_TOKEN]:
+        response?.data?.access_token,
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.REFRESH_TOKEN]:
+        response?.data?.refresh_token,
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.EXPIRES_IN]: response?.data?.expires_in,
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE]: locationId
         ? GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE.LOCATION
         : GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE.COMPANY,
-      isActive: true,
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.IS_ACTIVE]: true,
     };
 
     let isExist = false,
@@ -105,8 +114,39 @@ export const callback = async (req: Request, res: Response) => {
         SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
         data
       );
-    }
 
+      let accountDetails = {};
+      if (locationId) {
+        const subaccount = await fetchSubaccountInformation(locationId);
+        accountDetails = {
+          [GHL_ACCOUNT_DETAILS.AUTH_ID]:
+            supabaseResponse?.responseData?.[0]?.id,
+          [GHL_ACCOUNT_DETAILS.PHONE]: subaccount?.location?.phone || "",
+          [GHL_ACCOUNT_DETAILS.NAME]: subaccount?.location?.name || "",
+          [GHL_ACCOUNT_DETAILS.EMAIL]: subaccount?.location?.email || "",
+        };
+      } else {
+        const company = await fetchCompanyInformation(companyId);
+        await signUpNewUser(company?.company?.email);
+
+        accountDetails = {
+          [GHL_ACCOUNT_DETAILS.AUTH_ID]:
+            supabaseResponse?.responseData?.[0]?.id,
+          [GHL_ACCOUNT_DETAILS.PHONE]: company?.company?.phone || "",
+          [GHL_ACCOUNT_DETAILS.NAME]: company?.company?.name || "",
+          [GHL_ACCOUNT_DETAILS.EMAIL]: company?.company?.email || "",
+        };
+      }
+
+      const responseAccountDetails = await insertData(
+        SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS,
+        accountDetails
+      );
+
+      if (!responseAccountDetails?.success) {
+        console.log(responseAccountDetails);
+      }
+    }
     const redirectUrl =
       (req.query.redirect_uri as string) || req.headers.referer || "/";
     console.log(supabaseResponse);
@@ -151,15 +191,17 @@ export const refreshAuth = async (locationId: string) => {
       const supabaseResponse = await updateData(
         SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
         {
-          access_token: response?.data?.access_token,
-          refresh_token: response?.data?.refresh_token,
-          isActive: true,
+          [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCESS_TOKEN]:
+            response?.data?.access_token,
+          [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.REFRESH_TOKEN]:
+            response?.data?.refresh_token,
+          [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.IS_ACTIVE]: true,
         },
         GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID,
         locationId
       );
 
-      console.log("supabaseResponse", supabaseResponse);
+      console.log("supabaseResponse callback", supabaseResponse);
 
       if (!supabaseResponse.success) {
         return { success: false, message: "Failed to save API response." };
@@ -173,5 +215,36 @@ export const refreshAuth = async (locationId: string) => {
       error
     );
     return { success: false, message: "Internal Server Error" };
+  }
+};
+
+async function signUpNewUser(email: string) {
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email: email,
+      password: "example-password",
+    });
+
+    if (!error) {
+      return { success: true, data };
+    }
+
+    return { success: false, error };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export const signInUsingPassword = async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) throw error;
+    res.json({ token: data.session.access_token });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 };
