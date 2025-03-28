@@ -6,13 +6,13 @@ import {
 } from "./../services/supabaseClient";
 import { Request, Response } from "express";
 import axios from "axios";
-import { IGHLSubaccountAuth } from "@/types/IGhlSubaccountAuth";
 import { GHL_ACCOUNT_DETAILS, GHL_SUBACCOUNT_AUTH_ATTRIBUTES } from "../constants/tableAttributes";
 import {
   GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE,
   SUPABASE_TABLE_NAME,
 } from "../utils/constant";
 import { fetchSubaccountInformation } from "./ghlController";
+import { GHLSubaccountAuth } from "@/types/interfaces";
 
 const generateAccessToken = async (
   data: any
@@ -55,7 +55,7 @@ const generateAccessToken = async (
       }
     );
 
-    const insert: IGHLSubaccountAuth = {
+    const insert: GHLSubaccountAuth = {
       [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID]: locationId || "",
       [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_COMPANY_ID]: companyId,
       [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCESS_TOKEN]: response?.data?.access_token,
@@ -96,6 +96,7 @@ const generateAccessToken = async (
         [GHL_ACCOUNT_DETAILS.PHONE]: subaccount?.location?.phone || "",
         [GHL_ACCOUNT_DETAILS.NAME]: subaccount?.location?.name || "",
         [GHL_ACCOUNT_DETAILS.EMAIL]: subaccount?.location?.email || "",
+        [GHL_ACCOUNT_DETAILS.GHL_ID]: subaccount?.location?.id || "",
       };
       
       const responseAccountDetails = await insertData(

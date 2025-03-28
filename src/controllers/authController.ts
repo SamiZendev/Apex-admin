@@ -7,7 +7,6 @@ import {
   supabase,
   updateData,
 } from "../services/supabaseClient";
-import { IGHLSubaccountAuth } from "../types/IGhlSubaccountAuth";
 import {
   GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE,
   SUPABASE_TABLE_NAME,
@@ -20,6 +19,8 @@ import {
   fetchCompanyInformation,
   fetchSubaccountInformation,
 } from "./ghlController";
+import { formatTimestamp } from "../utils/helpers";
+import { GHLSubaccountAuth, RefreshAuthResponse } from "../types/interfaces";
 
 const clientId = process.env.CLIENT_ID;
 const clientSecret = process.env.CLIENT_SECRET;
@@ -55,7 +56,7 @@ export const callback = async (req: Request, res: Response) => {
     const locationId = response?.data?.locationId;
     const companyId = response?.data?.companyId;
 
-    const data: IGHLSubaccountAuth = {
+    const data: GHLSubaccountAuth = {
       [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID]: locationId || "",
       [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_COMPANY_ID]: companyId || "",
       [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCESS_TOKEN]:
@@ -92,20 +93,31 @@ export const callback = async (req: Request, res: Response) => {
       }
     } else if (companyId) {
       console.log("companyId", companyId);
-      const existingCompany = await matchByString(
-        SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
-        GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_COMPANY_ID,
-        companyId
-      );
-      isExist = existingCompany && Object.keys(existingCompany).length > 0;
+      const { data: existingCompany, error } = await supabase
+        .from(SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE)
+        .select("*")
+        .eq(
+          GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE,
+          GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE.COMPANY
+        )
+        .eq(GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_COMPANY_ID, companyId);
+
+      isExist = Array.isArray(existingCompany) && existingCompany.length > 0;
 
       if (isExist) {
-        supabaseResponse = await updateData(
-          SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
-          data,
-          GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_COMPANY_ID,
-          companyId
-        );
+        const { data: updateData, error } = await supabase
+          .from(SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE)
+          .update(data)
+          .eq(
+            GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE,
+            GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE.COMPANY
+          )
+          .eq(GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_COMPANY_ID, companyId)
+          .select();
+
+        if (!error) {
+          supabaseResponse = { ...updateData, success: true };
+        }
       }
     }
 
@@ -124,6 +136,7 @@ export const callback = async (req: Request, res: Response) => {
           [GHL_ACCOUNT_DETAILS.PHONE]: subaccount?.location?.phone || "",
           [GHL_ACCOUNT_DETAILS.NAME]: subaccount?.location?.name || "",
           [GHL_ACCOUNT_DETAILS.EMAIL]: subaccount?.location?.email || "",
+          [GHL_ACCOUNT_DETAILS.GHL_ID]: subaccount?.location?.id || "",
         };
       } else {
         const company = await fetchCompanyInformation(companyId);
@@ -135,6 +148,7 @@ export const callback = async (req: Request, res: Response) => {
           [GHL_ACCOUNT_DETAILS.PHONE]: company?.company?.phone || "",
           [GHL_ACCOUNT_DETAILS.NAME]: company?.company?.name || "",
           [GHL_ACCOUNT_DETAILS.EMAIL]: company?.company?.email || "",
+          [GHL_ACCOUNT_DETAILS.GHL_ID]: company?.company?.id || "",
         };
       }
 
@@ -160,21 +174,32 @@ export const callback = async (req: Request, res: Response) => {
   }
 };
 
-export const refreshAuth = async (locationId: string) => {
+export const refreshAuth = async (
+  id: string,
+  accountType: string
+): Promise<RefreshAuthResponse> => {
   try {
-    const existingLocation = await matchByString(
-      SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
-      GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID,
-      locationId
-    );
+    const type =
+      accountType === GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE.COMPANY
+        ? GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_COMPANY_ID
+        : GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID;
 
-    if (Array.isArray(existingLocation) && existingLocation.length > 0) {
+    const { data: existingData, error } = await supabase
+      .from(SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE)
+      .select("*")
+      .eq(type, id)
+      .eq(GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE, accountType);
+    console.log("refreshtoken");
+    if (Array.isArray(existingData) && existingData.length > 0 && !error) {
       const data = qs.stringify({
         client_id: clientId,
         client_secret: clientSecret,
         grant_type: "refresh_token",
-        refresh_token: existingLocation[0]?.refresh_token,
-        user_type: "Location",
+        refresh_token: existingData[0]?.refresh_token,
+        user_type:
+          accountType === GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE.COMPANY
+            ? "Company"
+            : "Location",
       });
 
       const response = await axios.post(
@@ -188,27 +213,35 @@ export const refreshAuth = async (locationId: string) => {
         }
       );
 
-      const supabaseResponse = await updateData(
-        SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
-        {
+      const { data: supabaseResponse, error } = await supabase
+        .from(SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE)
+        .update({
           [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCESS_TOKEN]:
             response?.data?.access_token,
           [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.REFRESH_TOKEN]:
             response?.data?.refresh_token,
           [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.IS_ACTIVE]: true,
-        },
-        GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID,
-        locationId
-      );
+          [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.UPDATED_AT]: formatTimestamp(
+            new Date()
+          ),
+        })
+        .eq(type, id)
+        .eq(GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE, accountType)
+        .select();
 
-      console.log("supabaseResponse callback", supabaseResponse);
-
-      if (!supabaseResponse.success) {
-        return { success: false, message: "Failed to save API response." };
+      if (error) {
+        return {
+          success: false,
+          message: "Error updating token",
+          error: { ...error },
+        };
       }
-
-      return { success: true };
+      return { success: true, data: supabaseResponse as GHLSubaccountAuth[] };
     }
+    return {
+      success: false,
+      message: "No existing data found or an error occurred",
+    };
   } catch (error) {
     console.error(
       "Error in generating access token from refresh token:",

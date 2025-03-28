@@ -7,7 +7,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import dotenv from 'dotenv';
 import authRoutes from "./routes/authRoutes";
-import webhookRoutes from "./routes/webhookRoutes";
+import combinedRoutes from "./routes/combinedRoutes";
 
 dotenv.config();
 const app = express();
@@ -25,7 +25,7 @@ app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(express.static("public"));
 app.use(cookieParser());
 app.use(authRoutes);
-app.use("/api", webhookRoutes);
+app.use("/api", combinedRoutes);
 
 // Routes
 app.get("/", (_req: Request, res: Response) => {

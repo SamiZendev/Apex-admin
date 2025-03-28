@@ -5,7 +5,8 @@ export const GHL_SUBACCOUNT_AUTH_ATTRIBUTES = {
   REFRESH_TOKEN: "refresh_token",
   EXPIRES_IN: "expires_in",
   ACCOUNT_TYPE: "account_type",
-  IS_ACTIVE: "isActive",
+  IS_ACTIVE: "is_active",
+  UPDATED_AT: "updated_at",
 } as const;
 
 export const GHL_ACCOUNT_DETAILS = {
@@ -16,4 +17,5 @@ export const GHL_ACCOUNT_DETAILS = {
   NAME: "name",
   EMAIL: "contact_email",
   REDIRECT_URL: "redirect_url",
+  GHL_ID: "ghl_id",
 } as const;
