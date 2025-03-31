@@ -10,7 +10,7 @@ export const insertData = async (tableName: string, data: object) => {
       .from(tableName)
       .insert(data)
       .select();
-    console.log("insertData error", error);
+
     if (error) {
       console.error("Insert Error:", error);
       throw new Error(error.message);
@@ -37,8 +37,8 @@ export const matchByString = async (
   try {
     const { data, error } = await supabase
       .from(tableName)
-      .select("*")
-      .like(columnName, value);
+      .select("id, *")
+      .eq(columnName, value);
     console.log("matchByString", data, "error", error);
     if (error) {
       console.error("Matching Error:", error);
@@ -61,18 +61,22 @@ export const updateData = async (
   toMatchColumnValue: any
 ) => {
   try {
-    const { data: responseData, error } = await supabase
+    const { data: updatedData, error } = await supabase
       .from(tableName)
       .update(data)
       .eq(toMatchColumnName, toMatchColumnValue)
       .select();
-    console.log("updateData", responseData, "error", error);
+
     if (error) {
       console.error("Update Error:", error);
       throw new Error(error.message);
     }
 
-    return { ...responseData, success: true };
+    return {
+      success: true,
+      message: "Data inserted successfully",
+      responseData: updatedData,
+    };
   } catch (err: unknown) {
     console.log("updateData err", err);
     const errorMessage =

@@ -6,13 +6,18 @@ import {
 } from "./../services/supabaseClient";
 import { Request, Response } from "express";
 import axios from "axios";
-import { GHL_ACCOUNT_DETAILS, GHL_SUBACCOUNT_AUTH_ATTRIBUTES } from "../constants/tableAttributes";
+import {
+  GHL_ACCOUNT_DETAILS,
+  GHL_SUBACCOUNT_AUTH_ATTRIBUTES,
+} from "../constants/tableAttributes";
 import {
   GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE,
   SUPABASE_TABLE_NAME,
 } from "../utils/constant";
 import { fetchSubaccountInformation } from "./ghlController";
 import { GHLSubaccountAuth } from "@/types/interfaces";
+import { isTokenExpired } from "../utils/helpers";
+import { refreshAuth } from "./authController";
 
 const generateAccessToken = async (
   data: any
@@ -27,7 +32,7 @@ const generateAccessToken = async (
 
     const { data: authData, error: authError } = await supabase
       .from(SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE)
-      .select(GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCESS_TOKEN)
+      .select()
       .eq(GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_COMPANY_ID, companyId)
       .eq(
         GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE,
@@ -39,7 +44,16 @@ const generateAccessToken = async (
       return { success: false, message: "Access token not found." };
     }
 
-    const { access_token } = authData;
+    let { access_token, updated_at, expires_in, account_type } = authData;
+
+    if (isTokenExpired(updated_at, expires_in)) {
+      const refreshTokenResponse = await refreshAuth(companyId, account_type);
+
+      if (refreshTokenResponse.success && refreshTokenResponse.data?.length) {
+        access_token = refreshTokenResponse.data[0].access_token;
+      }
+    }
+
     const response = await axios.post(
       `${process.env.GHL_API_BASE_URL}/oauth/locationToken`,
       {
@@ -58,8 +72,10 @@ const generateAccessToken = async (
     const insert: GHLSubaccountAuth = {
       [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID]: locationId || "",
       [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_COMPANY_ID]: companyId,
-      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCESS_TOKEN]: response?.data?.access_token,
-      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.REFRESH_TOKEN]: response?.data?.refresh_token,
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCESS_TOKEN]:
+        response?.data?.access_token,
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.REFRESH_TOKEN]:
+        response?.data?.refresh_token,
       [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.EXPIRES_IN]: response?.data?.expires_in,
       [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE]: locationId
         ? GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE.LOCATION
@@ -89,7 +105,7 @@ const generateAccessToken = async (
         SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
         insert
       );
-      
+
       const subaccount = await fetchSubaccountInformation(locationId);
       const accountDetails = {
         [GHL_ACCOUNT_DETAILS.AUTH_ID]: supabaseResponse?.responseData?.[0]?.id,
@@ -97,16 +113,21 @@ const generateAccessToken = async (
         [GHL_ACCOUNT_DETAILS.NAME]: subaccount?.location?.name || "",
         [GHL_ACCOUNT_DETAILS.EMAIL]: subaccount?.location?.email || "",
         [GHL_ACCOUNT_DETAILS.GHL_ID]: subaccount?.location?.id || "",
+        [GHL_ACCOUNT_DETAILS.GHL_COMPANY_ID]:
+          subaccount?.location?.companyId || "",
       };
-      
+
       const responseAccountDetails = await insertData(
         SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS,
         accountDetails
       );
-      
+
       if (!responseAccountDetails?.success) {
-        console.log("responseAccountDetails install webhook",responseAccountDetails)
-      } 
+        console.log(
+          "responseAccountDetails install webhook",
+          responseAccountDetails
+        );
+      }
     }
 
     console.log("supabaseResponse install webhook", supabaseResponse);

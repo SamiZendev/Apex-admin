@@ -116,11 +116,11 @@ export const callback = async (req: Request, res: Response) => {
           .select();
 
         if (!error) {
-          supabaseResponse = { ...updateData, success: true };
+          supabaseResponse = { responseData: updateData, success: true };
         }
       }
     }
-
+    let responseAccountDetails;
     if (!isExist) {
       supabaseResponse = await insertData(
         SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
@@ -137,6 +137,8 @@ export const callback = async (req: Request, res: Response) => {
           [GHL_ACCOUNT_DETAILS.NAME]: subaccount?.location?.name || "",
           [GHL_ACCOUNT_DETAILS.EMAIL]: subaccount?.location?.email || "",
           [GHL_ACCOUNT_DETAILS.GHL_ID]: subaccount?.location?.id || "",
+          [GHL_ACCOUNT_DETAILS.GHL_COMPANY_ID]:
+            subaccount?.location?.companyId || "",
         };
       } else {
         const company = await fetchCompanyInformation(companyId);
@@ -152,7 +154,7 @@ export const callback = async (req: Request, res: Response) => {
         };
       }
 
-      const responseAccountDetails = await insertData(
+      responseAccountDetails = await insertData(
         SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS,
         accountDetails
       );
@@ -161,13 +163,15 @@ export const callback = async (req: Request, res: Response) => {
         console.log(responseAccountDetails);
       }
     }
-    const redirectUrl =
-      (req.query.redirect_uri as string) || req.headers.referer || "/";
+
     console.log(supabaseResponse);
     if (supabaseResponse?.success) {
-      return res.redirect(`${redirectUrl}?status=success`);
+      const clientId = responseAccountDetails?.responseData?.[0]?.id;
+      return res.redirect(
+        `${process.env.REDIRECT_URL}?status=success&client_id=${clientId}`
+      );
     } else {
-      return res.redirect(`${redirectUrl}?status=error`);
+      return res.redirect(`${process.env.REDIRECT_URL}?status=error`);
     }
   } catch (error) {
     return res.status(500).json({ error: "Authentication failed" });
@@ -241,6 +245,7 @@ export const refreshAuth = async (
     return {
       success: false,
       message: "No existing data found or an error occurred",
+      error: { ...error },
     };
   } catch (error) {
     console.error(

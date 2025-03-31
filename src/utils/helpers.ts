@@ -7,7 +7,8 @@ export const isTokenExpired = (issued_at: string, expires_in: string) => {
 };
 
 export const formatTimestamp = (date: Date): string => {
-  const pad = (num: number, size: number): string => String(num).padStart(size, "0");
+  const pad = (num: number, size: number): string =>
+    String(num).padStart(size, "0");
 
   const year = date.getFullYear();
   const month = pad(date.getMonth() + 1, 2);
@@ -19,3 +20,23 @@ export const formatTimestamp = (date: Date): string => {
 
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${milliseconds}`;
 };
+
+export function convertToSeconds(
+  value: number,
+  unit: "months" | "weeks" | "days" | "hours" | "mins"
+): number {
+  if (value <= 0) return 0;
+
+  const conversionRates: Record<
+    "months" | "weeks" | "days" | "hours" | "mins",
+    number
+  > = {
+    months: 30 * 24 * 3600,
+    weeks: 7 * 24 * 3600,
+    days: 24 * 3600,
+    hours: 3600,
+    mins: 60,
+  };
+
+  return Math.floor(value * conversionRates[unit]);
+}
