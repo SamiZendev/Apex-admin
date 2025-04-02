@@ -1,9 +1,16 @@
 import { GHL_ACCOUNT_DETAILS } from "./../constants/tableAttributes";
 import { Request, Response } from "express";
-import { matchByString, updateData } from "../services/supabaseClient";
+import {
+  matchByString,
+  supabase,
+  updateData,
+} from "../services/supabaseClient";
 import { SUPABASE_TABLE_NAME } from "../utils/constant";
 import z from "zod";
-import { fetchAndSaveCalendarInformation } from "./ghlController";
+import {
+  fetchAndSaveCalendarBookedSlot,
+  fetchAndSaveCalendarInformation,
+} from "./ghlController";
 
 export const getDataById = async (req: Request, res: Response) => {
   try {
@@ -59,6 +66,11 @@ export const configureSubaccount = async (req: Request, res: Response) => {
       ghl_id
     );
 
+    const calendarEvents = await fetchAndSaveCalendarBookedSlot(
+      validatedData?.[GHL_ACCOUNT_DETAILS.GHL_CALENDAR_ID],
+      ghl_id
+    );
+
     if (
       calendar?.success &&
       "responseData" in calendar &&
@@ -108,17 +120,17 @@ export const getListOfAllSubaccountByCompanyId = async (
 ) => {
   try {
     const { id } = req.query;
-    const data = await matchByString(
-      SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS,
-      GHL_ACCOUNT_DETAILS.GHL_COMPANY_ID,
-      id as string
-    );
-    if (Array.isArray(data) && Object.keys(data).length > 0) {
-      return res.status(200).json({ success: true, message: "", data });
+    const { data, error } = await supabase
+      .from(SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS)
+      .select("*")
+      .eq(GHL_ACCOUNT_DETAILS.GHL_COMPANY_ID, id);
+
+    if (error) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Company Not Found", data: data });
     }
-    return res
-      .status(404)
-      .json({ success: false, message: "Company Not Found", data: [] });
+    return res.status(200).json({ success: true, message: "", data });
   } catch (error: any) {
     console.error(
       "Error fetching data:",

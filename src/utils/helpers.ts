@@ -1,3 +1,5 @@
+import crypto from "crypto";
+
 export const isTokenExpired = (issued_at: string, expires_in: string) => {
   const currentTime = Math.floor(Date.now() / 1000);
   return (
@@ -40,3 +42,7 @@ export function convertToSeconds(
 
   return Math.floor(value * conversionRates[unit]);
 }
+
+export const generateRandomPassword = (length: number = 12): string => {
+  return crypto.randomBytes(length).toString("base64").slice(0, length);
+};

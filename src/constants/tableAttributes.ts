@@ -62,3 +62,22 @@ export const CALENDAR_TEAM_MEMBERS = {
   IS_PRIMARY: "is_primary",
   GHL_CALENDAR_ID: "ghl_calendar_id",
 } as const;
+
+export const CALENDAR_BOOKED_SLOTS = {
+  ID: "id",
+  APPOINTMNET_STATUS: "appointment_status",
+  GHL_EVENT_ID: "ghl_event_id",
+  GHL_LOCATION_ID: "ghl_location_id",
+  GHL_ASSIGNED_USER_ID: "ghl_assigned_user_id",
+  GHL_CALENDAR_ID: "ghl_calendar_id",
+  START_TIME: "start_time",
+  END_TIME: "end_time",
+} as const;
+
+export const USER_DATA = {
+  ID: "id",
+  NAME: "name",
+  EMAIL: "email",
+  PASSWORD: "password",
+  GHL_COMPANY_ID: "ghl_company_id",
+} as const;

@@ -4,6 +4,8 @@ export const SUPABASE_TABLE_NAME = {
   CALENDAR_DATA: "calendar_data",
   CALENDAR_OPEN_HOURS: "calendar_open_hours",
   CALENDAR_TEAM_MEMBERS: "calendar_team_members",
+  CALENDAR_BOOKED_SLOTS: "calendar_booked_slots",
+  USERS: "users",
 } as const;
 
 export const GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE = {

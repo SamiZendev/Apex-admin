@@ -5,6 +5,7 @@ import {
   getListOfAllSubaccountByCompanyId,
 } from "../controllers/apiController";
 import express from "express";
+import { signInUsingPassword } from "../controllers/authController";
 
 const router = express.Router();
 
@@ -15,4 +16,5 @@ router.get(
 );
 router.get("/fetchAllCalendarsByLocationId", fetchAllCalendarsByLocationId);
 router.put("/configureAccount", configureSubaccount);
+router.post("/login" , signInUsingPassword);
 export default router;

@@ -14,18 +14,22 @@ import {
 import {
   GHL_ACCOUNT_DETAILS,
   GHL_SUBACCOUNT_AUTH_ATTRIBUTES,
+  USER_DATA,
 } from "../constants/tableAttributes";
 import {
   fetchCompanyInformation,
   fetchSubaccountInformation,
 } from "./ghlController";
-import { formatTimestamp } from "../utils/helpers";
+import { formatTimestamp, generateRandomPassword } from "../utils/helpers";
 import { GHLSubaccountAuth, RefreshAuthResponse } from "../types/interfaces";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 
 const clientId = process.env.CLIENT_ID;
 const clientSecret = process.env.CLIENT_SECRET;
 const baseURL = process.env.BASE_URL;
 const redirectURI = "http://localhost:3000/oauth/callback";
+const SECRET_KEY = process.env.JWT_SECRET as string;
 
 export const initiateAuth = (req: Request, res: Response) => {
   const authUrl = `${baseURL}/oauth/chooselocation?response_type=code&redirect_uri=${redirectURI}&client_id=${clientId}&scope=calendars.readonly calendars.write calendars/events.readonly calendars/events.write calendars/groups.readonly calendars/groups.write calendars/resources.readonly calendars/resources.write contacts.readonly contacts.write locations.readonly companies.readonly`;
@@ -142,7 +146,7 @@ export const callback = async (req: Request, res: Response) => {
         };
       } else {
         const company = await fetchCompanyInformation(companyId);
-        await signUpNewUser(company?.company?.email);
+        await signUpNewUser(company?.company);
 
         accountDetails = {
           [GHL_ACCOUNT_DETAILS.AUTH_ID]:
@@ -256,18 +260,19 @@ export const refreshAuth = async (
   }
 };
 
-async function signUpNewUser(email: string) {
+async function signUpNewUser(company: any) {
   try {
-    const { data, error } = await supabase.auth.signUp({
-      email: email,
-      password: "example-password",
-    });
-
-    if (!error) {
-      return { success: true, data };
-    }
-
-    return { success: false, error };
+    const password = generateRandomPassword();
+    console.log("password ", password);
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const userData = {
+      [USER_DATA.GHL_COMPANY_ID]: company?.id,
+      [USER_DATA.EMAIL]: company?.email,
+      [USER_DATA.NAME]: company?.name,
+      [USER_DATA.PASSWORD]: hashedPassword,
+    };
+    const data = await insertData(SUPABASE_TABLE_NAME.USERS, userData);
+    return data;
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -276,13 +281,36 @@ async function signUpNewUser(email: string) {
 export const signInUsingPassword = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    if (!email || !password) {
+      return res
+        .status(400)
+        .json({ message: "Email and password are required" });
+    }
+
+    const { data, error } = await supabase
+      .from(SUPABASE_TABLE_NAME.USERS)
+      .select("*")
+      .eq(USER_DATA.EMAIL, email)
+      .single();
+
+    if (error || !data) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const isMatch = await bcrypt.compare(password, data.password);
+    console.log(isMatch);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const token = jwt.sign({ id: data.id, email: data.email }, SECRET_KEY, {
+      expiresIn: "1h",
     });
-    if (error) throw error;
-    res.json({ token: data.session.access_token });
+    res.json({ data: {
+      token,
+      ...data
+    } });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error });
   }
 };

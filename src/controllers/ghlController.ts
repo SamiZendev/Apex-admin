@@ -1,5 +1,6 @@
 import { convertToSeconds, isTokenExpired } from "../utils/helpers";
 import {
+  CALENDAR_BOOKED_SLOTS,
   CALENDAR_DATA,
   CALENDAR_OPEN_HOURS,
   CALENDAR_TEAM_MEMBERS,
@@ -18,6 +19,7 @@ import {
 import axios from "axios";
 import { refreshAuth } from "./authController";
 import { Request, Response } from "express";
+import { AppointmentData } from "../types/interfaces";
 
 export const fetchAllCalendarsByLocationId = async (
   req: Request,
@@ -67,11 +69,13 @@ export const fetchAllCalendarsByLocationId = async (
           params: { locationId },
         }
       );
-      
-      const calendarIds = response.data.calendars.map((calendar: { id: string; name: string }) => ({
-        id: calendar.id,
-        name: calendar.name,
-      }));
+
+      const calendarIds = response.data.calendars.map(
+        (calendar: { id: string; name: string }) => ({
+          id: calendar.id,
+          name: calendar.name,
+        })
+      );
       return res
         .status(200)
         .json({ success: true, message: "", data: calendarIds });
@@ -458,3 +462,139 @@ async function saveTeamMembersToDB(calendarData: any, calendarUuid: string) {
     return [];
   }
 }
+
+export const fetchAndSaveCalendarBookedSlot = async (
+  calendarId: string,
+  locationId: string
+) => {
+  try {
+    if (!calendarId || !locationId) {
+      return { success: false, error: "Missing calendarId or locationId" };
+    }
+    const existingLocation = await matchByString(
+      SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
+      GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID,
+      locationId
+    );
+
+    if (!Array.isArray(existingLocation) || existingLocation.length === 0) {
+      return { success: false, message: "Location not found" };
+    }
+
+    let access_token = existingLocation[0]?.access_token;
+
+    if (
+      isTokenExpired(
+        existingLocation[0]?.updated_at,
+        existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.EXPIRES_IN]
+      )
+    ) {
+      const refreshTokenResponse = await refreshAuth(
+        locationId,
+        existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE]
+      );
+
+      if (refreshTokenResponse.success && refreshTokenResponse.data?.length) {
+        access_token = refreshTokenResponse.data[0].access_token;
+      }
+    }
+
+    const startTime = Date.now();
+    const endTime = new Date().setFullYear(new Date().getFullYear() + 1);
+
+    const response = await axios.get(
+      `${process.env.GHL_API_BASE_URL}/calendars/events`,
+      {
+        params: { locationId, calendarId, startTime, endTime },
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${access_token}`,
+          Version: process.env.GHL_API_VERSION,
+        },
+      }
+    );
+
+    const calendarEvents = response.data?.events;
+    if (!calendarEvents || !calendarEvents.length) {
+      return { success: false, message: "Calendar data not found" };
+    }
+    for (const event of calendarEvents) {
+      const eventData = {
+        [CALENDAR_BOOKED_SLOTS.APPOINTMNET_STATUS]: event?.appointmentStatus,
+        [CALENDAR_BOOKED_SLOTS.GHL_EVENT_ID]: event?.id,
+        [CALENDAR_BOOKED_SLOTS.GHL_LOCATION_ID]: event?.locationId,
+        [CALENDAR_BOOKED_SLOTS.GHL_ASSIGNED_USER_ID]: event?.assignedUserId,
+        [CALENDAR_BOOKED_SLOTS.GHL_CALENDAR_ID]: event?.calendarId,
+        [CALENDAR_BOOKED_SLOTS.START_TIME]: event?.startTime,
+        [CALENDAR_BOOKED_SLOTS.END_TIME]: event?.endTime,
+      };
+
+      try {
+        const existingCalendarEvents = await matchByString(
+          SUPABASE_TABLE_NAME.CALENDAR_BOOKED_SLOTS,
+          CALENDAR_BOOKED_SLOTS.GHL_EVENT_ID,
+          event?.id
+        );
+
+        let dbOperation;
+
+        if (
+          Array.isArray(existingCalendarEvents) &&
+          existingCalendarEvents.length > 0
+        ) {
+          dbOperation = await updateData(
+            SUPABASE_TABLE_NAME.CALENDAR_BOOKED_SLOTS,
+            eventData,
+            CALENDAR_BOOKED_SLOTS.GHL_EVENT_ID,
+            event.id
+          );
+        } else {
+          dbOperation = await insertData(
+            SUPABASE_TABLE_NAME.CALENDAR_BOOKED_SLOTS,
+            eventData
+          );
+        }
+        console.log("Database operation successful:", dbOperation);
+      } catch (error) {
+        console.error("Error processing event:", event.id, error);
+      }
+    }
+
+    return { success: true, events: calendarEvents };
+  } catch (error: any) {
+    console.error("Error fetching calendar booked slots:", error);
+    return {
+      success: false,
+      error: "Failed to fetch calendar booked slots",
+      details: error?.response?.data || error.message,
+    };
+  }
+};
+
+export const createGhlAppointment = async (
+  appointmentData: AppointmentData,
+  access_token: string
+) => {
+  try {
+    const response = await axios.post(
+      `${process.env.GHL_API_BASE_URL}/calendars/events/appointments`,
+      appointmentData,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${access_token}`,
+          "Content-Type": "application/json",
+          Version: process.env.GHL_API_VERSION,
+        },
+      }
+    );
+    return response;
+  } catch (error) {
+    console.error("Error creating appointment", error);
+    return {
+      success: false,
+      error: "Failed to create appointment",
+      details: error,
+    };
+  }
+};
