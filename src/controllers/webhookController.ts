@@ -7,6 +7,7 @@ import {
 import { Request, Response } from "express";
 import axios from "axios";
 import {
+  CALENDAR_BOOKED_SLOTS,
   GHL_ACCOUNT_DETAILS,
   GHL_SUBACCOUNT_AUTH_ATTRIBUTES,
 } from "../constants/tableAttributes";
@@ -15,7 +16,7 @@ import {
   SUPABASE_TABLE_NAME,
 } from "../utils/constant";
 import { fetchSubaccountInformation } from "./ghlController";
-import { GHLSubaccountAuth } from "@/types/interfaces";
+import { AppointmentWebhookData, GHLSubaccountAuth } from "@/types/interfaces";
 import { isTokenExpired } from "../utils/helpers";
 import { refreshAuth } from "./authController";
 
@@ -115,6 +116,8 @@ const generateAccessToken = async (
         [GHL_ACCOUNT_DETAILS.GHL_ID]: subaccount?.location?.id || "",
         [GHL_ACCOUNT_DETAILS.GHL_COMPANY_ID]:
           subaccount?.location?.companyId || "",
+        [GHL_ACCOUNT_DETAILS.GHL_LOCATION_TIMEZONE]:
+          subaccount?.location?.timezone || "UTC",
       };
 
       const responseAccountDetails = await insertData(
@@ -199,6 +202,39 @@ const changeAccountStatus = async (
   }
 };
 
+const appointmentCreate = async (
+  data: AppointmentWebhookData
+): Promise<{ success: boolean; message?: string; booked_slot?: any }> => {
+  try {
+    const { data: booked_slot, error } = await supabase
+      .from(SUPABASE_TABLE_NAME.CALENDAR_BOOKED_SLOTS)
+      .insert({
+        [CALENDAR_BOOKED_SLOTS.APPOINTMNET_STATUS]:
+          data?.appointment?.appointmentStatus,
+        [CALENDAR_BOOKED_SLOTS.GHL_CALENDAR_ID]: data?.appointment?.calendarId,
+        [CALENDAR_BOOKED_SLOTS.GHL_LOCATION_ID]: data?.locationId,
+        [CALENDAR_BOOKED_SLOTS.GHL_ASSIGNED_USER_ID]:
+          data?.appointment?.assignedUserId,
+        [CALENDAR_BOOKED_SLOTS.START_TIME]: data?.appointment?.startTime,
+        [CALENDAR_BOOKED_SLOTS.END_TIME]: data?.appointment?.endTime,
+        [CALENDAR_BOOKED_SLOTS.GHL_CONTACT_ID]: data?.appointment?.contactId,
+      })
+      .select();
+
+    if (error) {
+      throw error;
+    }
+    return { success: true, booked_slot: booked_slot };
+  } catch (error) {
+    console.error("Error in saving bookedSlots", error);
+    return {
+      success: false,
+      message: "Internal Server Error",
+      booked_slot: error,
+    };
+  }
+};
+
 export const handleWebhook = async (req: Request, res: Response) => {
   try {
     const { type } = req.body;
@@ -214,6 +250,14 @@ export const handleWebhook = async (req: Request, res: Response) => {
         const uninstallResponse = await changeAccountStatus(req.body);
         if (!uninstallResponse.success) {
           return res.status(400).json({ message: uninstallResponse.message });
+        }
+        return res.json({ message: "Token generated and saved successfully." });
+      case "AppointmentCreate":
+        const appointmentCreateResponse = await appointmentCreate(req.body);
+        if (!appointmentCreateResponse.success) {
+          return res
+            .status(400)
+            .json({ message: appointmentCreateResponse.message });
         }
         return res.json({ message: "Token generated and saved successfully." });
       default:

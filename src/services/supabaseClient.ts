@@ -32,7 +32,7 @@ export const insertData = async (tableName: string, data: object) => {
 export const matchByString = async (
   tableName: string,
   columnName: string,
-  value: string
+  value: string | number
 ) => {
   try {
     const { data, error } = await supabase

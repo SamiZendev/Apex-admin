@@ -21,6 +21,7 @@ export const GHL_ACCOUNT_DETAILS = {
   PRIORITY_SCORE: "priority_score",
   GHL_COMPANY_ID: "ghl_company_id",
   GHL_CALENDAR_ID: "ghl_calendar_id",
+  GHL_LOCATION_TIMEZONE: "ghl_location_timezone",
 } as const;
 
 export const CALENDAR_DATA = {
@@ -72,6 +73,7 @@ export const CALENDAR_BOOKED_SLOTS = {
   GHL_CALENDAR_ID: "ghl_calendar_id",
   START_TIME: "start_time",
   END_TIME: "end_time",
+  GHL_CONTACT_ID: "ghl_contact_id",
 } as const;
 
 export const USER_DATA = {

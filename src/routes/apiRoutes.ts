@@ -1,8 +1,10 @@
 import { fetchAllCalendarsByLocationId } from "../controllers/ghlController";
 import {
+  bookAppointment,
   configureSubaccount,
   getDataById,
   getListOfAllSubaccountByCompanyId,
+  getTimezones,
 } from "../controllers/apiController";
 import express from "express";
 import { signInUsingPassword } from "../controllers/authController";
@@ -16,5 +18,8 @@ router.get(
 );
 router.get("/fetchAllCalendarsByLocationId", fetchAllCalendarsByLocationId);
 router.put("/configureAccount", configureSubaccount);
-router.post("/login" , signInUsingPassword);
+router.post("/login", signInUsingPassword);
+router.post("/booking", bookAppointment);
+router.get("/timezone", getTimezones);
+
 export default router;

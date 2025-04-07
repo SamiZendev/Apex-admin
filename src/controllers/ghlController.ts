@@ -1,9 +1,14 @@
-import { convertToSeconds, isTokenExpired } from "../utils/helpers";
+import {
+  convertToSeconds,
+  isTokenExpired,
+  retrieveAccessToken,
+} from "../utils/helpers";
 import {
   CALENDAR_BOOKED_SLOTS,
   CALENDAR_DATA,
   CALENDAR_OPEN_HOURS,
   CALENDAR_TEAM_MEMBERS,
+  GHL_ACCOUNT_DETAILS,
   GHL_SUBACCOUNT_AUTH_ATTRIBUTES,
 } from "../constants/tableAttributes";
 import {
@@ -19,7 +24,8 @@ import {
 import axios from "axios";
 import { refreshAuth } from "./authController";
 import { Request, Response } from "express";
-import { AppointmentData } from "../types/interfaces";
+import { AppointmentData, ContactData } from "../types/interfaces";
+import { DateTime } from "luxon";
 
 export const fetchAllCalendarsByLocationId = async (
   req: Request,
@@ -33,31 +39,9 @@ export const fetchAllCalendarsByLocationId = async (
         .json({ success: false, error: "Missing locationId in body" });
     }
 
-    const subaccount = await matchByString(
-      SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
-      GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID,
-      locationId as string
-    );
+    const access_token = await retrieveAccessToken(locationId as string);
 
-    if (Array.isArray(subaccount) && subaccount.length > 0) {
-      let access_token = subaccount[0]?.access_token;
-
-      if (
-        isTokenExpired(
-          subaccount[0]?.updated_at,
-          subaccount[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.EXPIRES_IN]
-        )
-      ) {
-        const refreshTokenResponse = await refreshAuth(
-          locationId as string,
-          subaccount[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE]
-        );
-
-        if (refreshTokenResponse.success && refreshTokenResponse.data?.length) {
-          access_token = refreshTokenResponse.data[0].access_token;
-        }
-      }
-
+    if (access_token) {
       const response = await axios.get(
         `${process.env.GHL_API_BASE_URL}/calendars/`,
         {
@@ -69,6 +53,13 @@ export const fetchAllCalendarsByLocationId = async (
           params: { locationId },
         }
       );
+      console.log("response.data.calendars", response.data.calendars);
+      // const calendarIds = response.data.calendars
+      //   .filter((calendar: { isActive: boolean }) => calendar.isActive)
+      //   .map((calendar: { id: string; name: string }) => ({
+      //     id: calendar.id,
+      //     name: calendar.name,
+      //   }));
 
       const calendarIds = response.data.calendars.map(
         (calendar: { id: string; name: string }) => ({
@@ -76,6 +67,8 @@ export const fetchAllCalendarsByLocationId = async (
           name: calendar.name,
         })
       );
+
+      console.log("calendarIds", calendarIds);
       return res
         .status(200)
         .json({ success: true, message: "", data: calendarIds });
@@ -160,48 +153,19 @@ export const fetchSubaccountInformation = async (locationId: string) => {
     if (!locationId) {
       return { success: false, error: "Missing locationId in body" };
     }
-    const existingLocation = await matchByString(
-      SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
-      GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID,
-      locationId
-    );
+    const access_token = await retrieveAccessToken(locationId);
 
-    if (
-      Array.isArray(existingLocation) &&
-      Object.keys(existingLocation).length > 0
-    ) {
-      let access_token = existingLocation[0]?.access_token;
-
-      if (
-        isTokenExpired(
-          existingLocation[0]?.updated_at,
-          existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.EXPIRES_IN]
-        )
-      ) {
-        const refreshTokenResponse = await refreshAuth(
-          locationId,
-          existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE]
-        );
-
-        if (refreshTokenResponse.success && refreshTokenResponse.data?.length) {
-          access_token = refreshTokenResponse.data[0].access_token;
-        }
+    const response = await axios.get(
+      `${process.env.GHL_API_BASE_URL}/locations/${locationId}`,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${access_token}`,
+          Version: process.env.GHL_API_VERSION,
+        },
       }
-
-      const response = await axios.get(
-        `${process.env.GHL_API_BASE_URL}/locations/${locationId}`,
-        {
-          headers: {
-            Accept: "application/json",
-            Authorization: `Bearer ${access_token}`,
-            Version: process.env.GHL_API_VERSION,
-          },
-        }
-      );
-      return response.data;
-    }
-
-    return { success: false, error: "Location Not Found" };
+    );
+    return response.data;
   } catch (error: any) {
     console.error(
       "Error fetching subaccount details:",
@@ -222,34 +186,9 @@ export const fetchAndSaveCalendarInformation = async (
     if (!calendarId || !locationId) {
       return { success: false, error: "Missing calendarId or locationId" };
     }
-    const existingLocation = await matchByString(
-      SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
-      GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID,
-      locationId
-    );
+    const access_token = await retrieveAccessToken(locationId as string);
 
-    if (
-      Array.isArray(existingLocation) &&
-      Object.keys(existingLocation).length > 0
-    ) {
-      let access_token = existingLocation[0]?.access_token;
-
-      if (
-        isTokenExpired(
-          existingLocation[0]?.updated_at,
-          existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.EXPIRES_IN]
-        )
-      ) {
-        const refreshTokenResponse = await refreshAuth(
-          locationId,
-          existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE]
-        );
-
-        if (refreshTokenResponse.success && refreshTokenResponse.data?.length) {
-          access_token = refreshTokenResponse.data[0].access_token;
-        }
-      }
-
+    if (access_token) {
       const response = await axios.get(
         `${process.env.GHL_API_BASE_URL}/calendars/${calendarId}`,
         {
@@ -271,17 +210,17 @@ export const fetchAndSaveCalendarInformation = async (
         [CALENDAR_DATA.CALENDAR_ID]: response?.data?.calendar?.id,
         [CALENDAR_DATA.SLOT_INTERVAL]: convertToSeconds(
           response?.data?.calendar?.slotInterval || 0,
-          response?.data?.calendar?.slotIntervalUnit
+          response?.data?.calendar?.slotIntervalUnit || "mins"
         ),
         [CALENDAR_DATA.SLOT_DURATION]: convertToSeconds(
           response?.data?.calendar?.slotDuration || 0,
-          response?.data?.calendar?.slotDurationUnit
+          response?.data?.calendar?.slotDurationUnit || "mins"
         ),
         [CALENDAR_DATA.PRE_BUFFER_TIME]: convertToSeconds(
           response?.data?.calendar?.preBuffer || 0,
           response?.data?.calendar?.preBufferUnit
         ),
-        [CALENDAR_DATA.IS_ACTIVE]: response?.data?.calendar?.isActive || true,
+        [CALENDAR_DATA.IS_ACTIVE]: response?.data?.calendar?.isActive || false,
         [CALENDAR_DATA.GROUP_ID]: response?.data?.calendar?.groupId,
         [CALENDAR_DATA.SLUG]: response?.data?.calendar?.slug,
         [CALENDAR_DATA.APPOINTMENTS_PER_SLOT]:
@@ -332,8 +271,19 @@ export const fetchAndSaveCalendarInformation = async (
         return { success: false, message: "Failed to save calendar data" };
       }
 
+      const getAccountDetails = await matchByString(
+        SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS,
+        GHL_ACCOUNT_DETAILS.GHL_ID,
+        locationId
+      );
+
+      const locationTimezone =
+        Array.isArray(getAccountDetails) && getAccountDetails[0]
+          ? getAccountDetails[0]?.[GHL_ACCOUNT_DETAILS.GHL_LOCATION_TIMEZONE] ??
+            "UTC"
+          : "UTC";
       const [openHoursIds, teamMembersIds] = await Promise.all([
-        saveOpenHoursToDB(calendar, savedCalendarId),
+        saveOpenHoursToDB(calendar, savedCalendarId, locationTimezone),
         saveTeamMembersToDB(calendar, savedCalendarId),
       ]);
 
@@ -352,19 +302,47 @@ export const fetchAndSaveCalendarInformation = async (
   }
 };
 
-async function saveOpenHoursToDB(calendarData: any, calendarUuid: string) {
+async function saveOpenHoursToDB(
+  calendarData: any,
+  calendarUuid: string,
+  locationTimezone: string
+) {
   if (!calendarData?.openHours) return;
   const insertedIds: string[] = [];
+
   for (const entry of calendarData.openHours) {
     for (const day of entry.daysOfTheWeek) {
       for (const hour of entry.hours) {
+        let openHour = hour.openHour;
+        let openMinute = hour.openMinute;
+        let closeHour = hour.closeHour;
+        let closeMinute = hour.closeMinute;
+
+        // Convert to UTC if the timezone is not UTC
+        if (locationTimezone !== "UTC") {
+          const openTime = DateTime.fromObject(
+            { hour: openHour, minute: openMinute },
+            { zone: locationTimezone }
+          ).toUTC();
+
+          const closeTime = DateTime.fromObject(
+            { hour: closeHour, minute: closeMinute },
+            { zone: locationTimezone }
+          ).toUTC();
+
+          openHour = openTime.hour;
+          openMinute = openTime.minute;
+          closeHour = closeTime.hour;
+          closeMinute = closeTime.minute;
+        }
+
         const dataToInsert = {
           [CALENDAR_OPEN_HOURS.CALENDAR_ID]: calendarUuid,
           [CALENDAR_OPEN_HOURS.DAY_OF_THE_WEEK]: day,
-          [CALENDAR_OPEN_HOURS.OPEN_HOUR]: hour.openHour,
-          [CALENDAR_OPEN_HOURS.OPEN_MINUTE]: hour.openMinute,
-          [CALENDAR_OPEN_HOURS.CLOSE_HOUR]: hour.closeHour,
-          [CALENDAR_OPEN_HOURS.CLOSE_MINUTE]: hour.closeMinute,
+          [CALENDAR_OPEN_HOURS.OPEN_HOUR]: openHour,
+          [CALENDAR_OPEN_HOURS.OPEN_MINUTE]: openMinute,
+          [CALENDAR_OPEN_HOURS.CLOSE_HOUR]: closeHour,
+          [CALENDAR_OPEN_HOURS.CLOSE_MINUTE]: closeMinute,
           [CALENDAR_OPEN_HOURS.GHL_CALENDAR_ID]: calendarData?.id,
         };
 
@@ -377,24 +355,28 @@ async function saveOpenHoursToDB(calendarData: any, calendarUuid: string) {
             .limit(1)
             .single();
 
-          let openHour;
+          let openHourEntry;
 
           if (!error && data) {
-            openHour = await updateData(
+            openHourEntry = await updateData(
               SUPABASE_TABLE_NAME.CALENDAR_OPEN_HOURS,
               dataToInsert,
               CALENDAR_OPEN_HOURS.ID,
               data.id
             );
           } else {
-            openHour = await insertData(
+            openHourEntry = await insertData(
               SUPABASE_TABLE_NAME.CALENDAR_OPEN_HOURS,
               dataToInsert
             );
           }
-          if (openHour?.success && Array.isArray(openHour.responseData)) {
+
+          if (
+            openHourEntry?.success &&
+            Array.isArray(openHourEntry.responseData)
+          ) {
             insertedIds.push(
-              ...openHour.responseData.map((item: any) => item.id)
+              ...openHourEntry.responseData.map((item: any) => item.id)
             );
           }
         } catch (error) {
@@ -471,34 +453,12 @@ export const fetchAndSaveCalendarBookedSlot = async (
     if (!calendarId || !locationId) {
       return { success: false, error: "Missing calendarId or locationId" };
     }
-    const existingLocation = await matchByString(
-      SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
-      GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID,
-      locationId
-    );
 
-    if (!Array.isArray(existingLocation) || existingLocation.length === 0) {
-      return { success: false, message: "Location not found" };
+    const access_token = await retrieveAccessToken(locationId as string);
+
+    if (!access_token) {
+      return { success: false, message: "Generate Access Token" };
     }
-
-    let access_token = existingLocation[0]?.access_token;
-
-    if (
-      isTokenExpired(
-        existingLocation[0]?.updated_at,
-        existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.EXPIRES_IN]
-      )
-    ) {
-      const refreshTokenResponse = await refreshAuth(
-        locationId,
-        existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE]
-      );
-
-      if (refreshTokenResponse.success && refreshTokenResponse.data?.length) {
-        access_token = refreshTokenResponse.data[0].access_token;
-      }
-    }
-
     const startTime = Date.now();
     const endTime = new Date().setFullYear(new Date().getFullYear() + 1);
 
@@ -588,12 +548,40 @@ export const createGhlAppointment = async (
         },
       }
     );
-    return response;
+    return response?.data;
   } catch (error) {
     console.error("Error creating appointment", error);
     return {
       success: false,
       error: "Failed to create appointment",
+      details: error,
+    };
+  }
+};
+
+export const createGhlContact = async (
+  contactData: ContactData,
+  access_token: string
+) => {
+  try {
+    const response = await axios.post(
+      `${process.env.GHL_API_BASE_URL}/contacts/upsert`,
+      contactData,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${access_token}`,
+          "Content-Type": "application/json",
+          Version: process.env.GHL_API_VERSION,
+        },
+      }
+    );
+    return response.data?.contact;
+  } catch (error) {
+    console.error("Error creating new contact", error);
+    return {
+      success: false,
+      error: "Failed to create contact",
       details: error,
     };
   }

@@ -141,8 +141,8 @@ export const callback = async (req: Request, res: Response) => {
           [GHL_ACCOUNT_DETAILS.NAME]: subaccount?.location?.name || "",
           [GHL_ACCOUNT_DETAILS.EMAIL]: subaccount?.location?.email || "",
           [GHL_ACCOUNT_DETAILS.GHL_ID]: subaccount?.location?.id || "",
-          [GHL_ACCOUNT_DETAILS.GHL_COMPANY_ID]:
-            subaccount?.location?.companyId || "",
+          [GHL_ACCOUNT_DETAILS.GHL_COMPANY_ID]: subaccount?.location?.companyId || "",
+          [GHL_ACCOUNT_DETAILS.GHL_LOCATION_TIMEZONE]: subaccount?.location?.timezone || "UTC",
         };
       } else {
         const company = await fetchCompanyInformation(companyId);

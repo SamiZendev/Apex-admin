@@ -1,16 +1,33 @@
-import { GHL_ACCOUNT_DETAILS } from "./../constants/tableAttributes";
+import { SUPABASE_TABLE_NAME } from "../utils/constant";
+import {
+  CALENDAR_BOOKED_SLOTS,
+  CALENDAR_DATA,
+  CALENDAR_OPEN_HOURS,
+  GHL_ACCOUNT_DETAILS,
+} from "./../constants/tableAttributes";
 import { Request, Response } from "express";
 import {
   matchByString,
   supabase,
   updateData,
 } from "../services/supabaseClient";
-import { SUPABASE_TABLE_NAME } from "../utils/constant";
 import z from "zod";
 import {
+  createGhlAppointment,
+  createGhlContact,
   fetchAndSaveCalendarBookedSlot,
   fetchAndSaveCalendarInformation,
 } from "./ghlController";
+import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+import { BookedSlots, Calendar } from "../types/interfaces";
+import { retrieveAccessToken } from "../utils/helpers";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(customParseFormat);
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 export const getDataById = async (req: Request, res: Response) => {
   try {
@@ -141,4 +158,262 @@ export const getListOfAllSubaccountByCompanyId = async (
       details: error?.response?.data || error.message,
     });
   }
+};
+
+export const bookAppointment = async (req: Request, res: Response) => {
+  try {
+    const { firstName, lastName, email, phone, startTime, endTime } = req.body;
+    if (!startTime || !endTime || !firstName || !email) {
+      return res.status(400).json({
+        message:
+          "Missing one of the required fields: startTime, endTime, firstName, and email.",
+      });
+    }
+
+    const currentUtcTimestamp = Math.floor(Date.now() / 1000);
+
+    const startTimeDate = new Date(Number(startTime) * 1000);
+    const endTimeDate = new Date(Number(endTime) * 1000);
+    const currentUtcDate = new Date(currentUtcTimestamp * 1000);
+
+    if (Number(startTime) <= currentUtcTimestamp) {
+      return res
+        .status(400)
+        .json({ message: "Booking time must be in the future" });
+    }
+
+    if (Number(endTime) <= Number(startTime)) {
+      return res
+        .status(400)
+        .json({ message: "End time must be after start time" });
+    }
+
+    const bookingDuration = endTime - startTime;
+
+    const { data: calendars, error } = await supabase
+      .from(SUPABASE_TABLE_NAME.CALENDAR_DATA)
+      .select(
+        `*,${SUPABASE_TABLE_NAME.CALENDAR_OPEN_HOURS}(*),${SUPABASE_TABLE_NAME.CALENDAR_TEAM_MEMBERS}(*),${SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS}(*)`
+      )
+      .eq(CALENDAR_DATA.SLOT_DURATION, bookingDuration)
+      .eq(CALENDAR_DATA.IS_ACTIVE, true);
+
+    if (error || !calendars) {
+      return res.status(400).json({ success: false , data: {error , calendars} });
+    }
+
+    const availableCalendars = calendars?.filter((calendar) => {
+      const openHours = calendar[SUPABASE_TABLE_NAME.CALENDAR_OPEN_HOURS];
+
+      return openHours.some((entry: any) => {
+        const openTime = new Date(startTimeDate);
+        openTime.setUTCHours(
+          entry[CALENDAR_OPEN_HOURS.OPEN_HOUR],
+          entry[CALENDAR_OPEN_HOURS.OPEN_MINUTE],
+          0,
+          0
+        );
+
+        const closeTime = new Date(endTimeDate);
+        closeTime.setUTCHours(
+          entry[CALENDAR_OPEN_HOURS.CLOSE_HOUR],
+          entry[CALENDAR_OPEN_HOURS.CLOSE_MINUTE],
+          0,
+          0
+        );
+
+        return startTimeDate >= openTime && endTimeDate <= closeTime;
+      });
+    });
+
+    let availableCalendarIds = availableCalendars?.map(
+      (calendar) => calendar.calendar_id
+    );
+    const bookedSlots = await getBookedSlots(availableCalendarIds);
+
+    if (!bookedSlots.success || !bookedSlots.data) {
+      return res
+        .status(400)
+        .json({ message: "Unable to fetch booked slots", bookedSlots });
+    }
+
+    const filteredCalendars = filterAvailableCalendars(
+      availableCalendars,
+      bookedSlots.data,
+      startTime,
+      endTime
+    );
+    const sortedCalendars = sortCalendars(filteredCalendars);
+    const locationId =
+      sortedCalendars[0]?.[SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS][0]?.[
+        GHL_ACCOUNT_DETAILS.GHL_ID
+      ];
+    const access_token = await retrieveAccessToken(locationId);
+    const locationBasedTimezone =
+      sortedCalendars[0]?.[SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS][0]?.[
+        GHL_ACCOUNT_DETAILS.GHL_LOCATION_TIMEZONE
+      ];
+
+    const contact = await createGhlContact(
+      {
+        firstName: firstName,
+        lastName: lastName || "",
+        email: email,
+        phone: phone,
+        locationId: locationId,
+        source: process.env.GHL_APP_NAME as string,
+      },
+      access_token
+    );
+
+    if (!contact) {
+      return res.status(400).json({
+        success: false,
+        message: "Contact was not created",
+        contact,
+      });
+    }
+
+    const appointment = await createGhlAppointment(
+      {
+        calendarId: sortedCalendars[0]?.[CALENDAR_DATA.CALENDAR_ID],
+        locationId: locationId,
+        contactId: contact?.id,
+        startTime: dayjs
+          .unix(Number(startTime))
+          .tz(locationBasedTimezone)
+          .format(),
+        endTime: dayjs.unix(Number(endTime)).tz(locationBasedTimezone).format(),
+      },
+      access_token
+    );
+
+    return res.status(200).json({
+      calendarId: sortedCalendars[0]?.[CALENDAR_DATA.CALENDAR_ID],
+      locationId: locationId,
+      contactId: contact?.id,
+      booked: { ...appointment },
+    });
+  } catch (error) {}
+};
+
+export const getTimezones = async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from(SUPABASE_TABLE_NAME.TIMEZONE)
+      .select("timezone");
+    if (error) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Company Not Found", data: error });
+    }
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error("Error fetching data:", error);
+    return res.status(500).json({
+      success: false,
+      error,
+    });
+  }
+};
+
+const getBookedSlots = async (
+  ghlCalendarIds: string[]
+): Promise<{ success: boolean; data?: BookedSlots[]; error?: any }> => {
+  try {
+    const { data, error } = await supabase
+      .from(SUPABASE_TABLE_NAME.CALENDAR_BOOKED_SLOTS)
+      .select()
+      .in(CALENDAR_BOOKED_SLOTS.GHL_CALENDAR_ID, ghlCalendarIds);
+    if (error) {
+      throw error;
+    }
+
+    return { success: true, data: data || [] };
+  } catch (error) {
+    console.log("Error occured while fetching booked slots");
+    return {
+      success: false,
+      error,
+    };
+  }
+};
+
+const isOverlapping = (
+  requestedStartTime: number,
+  requestedEndTime: number,
+  bookedStartTime: number,
+  bookedEndTime: number
+) => requestedStartTime < bookedEndTime && bookedStartTime < requestedEndTime;
+
+const filterAvailableCalendars = (
+  calendars: Calendar[],
+  bookedSlots: BookedSlots[],
+  requestedStart: number,
+  requestedEnd: number
+): Calendar[] => {
+  return calendars
+    .map((calendar) => {
+      const teamMembers = calendar.calendar_team_members || [];
+
+      if (teamMembers.length === 0) {
+        return calendar;
+      }
+
+      const availableMembers = teamMembers.filter((member) => {
+        const memberBookings = bookedSlots?.filter(
+          (slot) => slot?.ghl_assigned_user_id === member.user_id
+        );
+
+        const isBusy = memberBookings?.some((slot) =>
+          isOverlapping(
+            requestedStart,
+            requestedEnd,
+            slot?.start_time,
+            slot?.end_time
+          )
+        );
+
+        return !isBusy;
+      });
+
+      if (availableMembers?.length > 0) {
+        return {
+          ...calendar,
+          calendar_team_members: availableMembers,
+        };
+      }
+
+      return null;
+    })
+    .filter((calendar): calendar is Calendar => calendar !== null);
+};
+
+const sortCalendars = (calendars: any[]) => {
+  return calendars.sort((a, b) => {
+    const bookedSlotsA = a.booked_slots ? a.booked_slots : 0;
+    const bookedSlotsB = b.booked_slots ? b.booked_slots : 0;
+
+    if (bookedSlotsA !== bookedSlotsB) {
+      return bookedSlotsA - bookedSlotsB;
+    }
+
+    const priorityA = parseInt(
+      a.ghl_account_details?.[0]?.priority_score || "0",
+      10
+    );
+    const priorityB = parseInt(
+      b.ghl_account_details?.[0]?.priority_score || "0",
+      10
+    );
+
+    if (priorityA !== priorityB) {
+      return priorityB - priorityA;
+    }
+
+    const spendA = parseFloat(a.ghl_account_details?.[0]?.spend_amount || "0");
+    const spendB = parseFloat(b.ghl_account_details?.[0]?.spend_amount || "0");
+
+    return spendB - spendA;
+  });
 };

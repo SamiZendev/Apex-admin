@@ -24,13 +24,57 @@ export interface AppointmentData {
   contactId: string;
   startTime: string;
   endTime: string;
-  title: string;
-  meetingLocationType: string;
-  appointmentStatus: string;
-  assignedUserId: string;
-  address: string;
-  ignoreDateRange: boolean;
-  toNotify: boolean;
-  ignoreFreeSlotValidation: boolean;
-  rrule: string;
+  title?: string;
+  meetingLocationType?: string;
+  appointmentStatus?: string;
+  assignedUserId?: string;
+  address?: string;
+  ignoreDateRange?: boolean;
+  toNotify?: boolean;
+  ignoreFreeSlotValidation?: boolean;
+  rrule?: string;
+}
+
+export interface OpenHours {
+  day_of_the_week: number;
+  open_hour: number;
+  open_minute: number;
+  close_hour: number;
+  close_minute: number;
+}
+export interface TeamMembers {
+  user_id: string;
+  ghl_calendar_id: string;
+  calendar_id: string;
+  priority: Number;
+  is_primary: boolean;
+}
+
+export interface BookedSlots {
+  ghl_assigned_user_id: string;
+  ghl_location_id: string;
+  start_time: number;
+  end_time: number;
+  ghl_calendar_id: string;
+}
+export interface Calendar {
+  id: string;
+  name: string;
+  calendar_open_hours: OpenHours[];
+  calendar_team_members: TeamMembers[];
+}
+
+export interface ContactData {
+  firstName: string;
+  lastName?: string;
+  email: string;
+  locationId: string;
+  phone?: string;
+  source?: string;
+}
+
+export interface AppointmentWebhookData {
+  type: string;
+  locationId: string;
+  appointment: AppointmentData;
 }
