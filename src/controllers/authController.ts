@@ -24,6 +24,7 @@ import { formatTimestamp, generateRandomPassword } from "../utils/helpers";
 import { GHLSubaccountAuth, RefreshAuthResponse } from "../types/interfaces";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { sendEmail } from "../services/email";
 
 const clientId = process.env.CLIENT_ID;
 const clientSecret = process.env.CLIENT_SECRET;
@@ -141,8 +142,10 @@ export const callback = async (req: Request, res: Response) => {
           [GHL_ACCOUNT_DETAILS.NAME]: subaccount?.location?.name || "",
           [GHL_ACCOUNT_DETAILS.EMAIL]: subaccount?.location?.email || "",
           [GHL_ACCOUNT_DETAILS.GHL_ID]: subaccount?.location?.id || "",
-          [GHL_ACCOUNT_DETAILS.GHL_COMPANY_ID]: subaccount?.location?.companyId || "",
-          [GHL_ACCOUNT_DETAILS.GHL_LOCATION_TIMEZONE]: subaccount?.location?.timezone || "UTC",
+          [GHL_ACCOUNT_DETAILS.GHL_COMPANY_ID]:
+            subaccount?.location?.companyId || "",
+          [GHL_ACCOUNT_DETAILS.GHL_LOCATION_TIMEZONE]:
+            subaccount?.location?.timezone || "UTC",
         };
       } else {
         const company = await fetchCompanyInformation(companyId);
@@ -272,6 +275,22 @@ async function signUpNewUser(company: any) {
       [USER_DATA.PASSWORD]: hashedPassword,
     };
     const data = await insertData(SUPABASE_TABLE_NAME.USERS, userData);
+    const message = `
+      Hi ${company?.name},
+      Here is your temporary password:
+      🔐 Password: ${password}
+      Please log in using this password and change it immediately for your security.
+      If you did not request this, please ignore this email or contact support.
+      Best regards,  
+      Apex Acquisition
+      `;
+    if (data.success && company?.email) {
+      await sendEmail(
+        company?.email,
+        "Welcome - Here is your password",
+        message
+      );
+    }
     return data;
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -306,10 +325,12 @@ export const signInUsingPassword = async (req: Request, res: Response) => {
     const token = jwt.sign({ id: data.id, email: data.email }, SECRET_KEY, {
       expiresIn: "1h",
     });
-    res.json({ data: {
-      token,
-      ...data
-    } });
+    res.json({
+      data: {
+        token,
+        ...data,
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ error });
   }
