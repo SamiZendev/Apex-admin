@@ -29,7 +29,7 @@ import { sendEmail } from "../services/email";
 const clientId = process.env.CLIENT_ID;
 const clientSecret = process.env.CLIENT_SECRET;
 const baseURL = process.env.BASE_URL;
-const redirectURI = "http://localhost:3000/oauth/callback";
+const redirectURI = process.env.GHL_REDIRECT_URI;
 const SECRET_KEY = process.env.JWT_SECRET as string;
 
 export const initiateAuth = (req: Request, res: Response) => {
