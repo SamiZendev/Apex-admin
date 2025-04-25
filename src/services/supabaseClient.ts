@@ -39,7 +39,6 @@ export const matchByString = async (
       .from(tableName)
       .select("id, *")
       .eq(columnName, value);
-    console.log("matchByString", data, "error", error);
     if (error) {
       console.error("Matching Error:", error);
       throw new Error(error.message);

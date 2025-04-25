@@ -26,6 +26,7 @@ import { refreshAuth } from "./authController";
 import { Request, Response } from "express";
 import { AppointmentData, ContactData } from "../types/interfaces";
 import { DateTime } from "luxon";
+import dayjs from "dayjs";
 
 export const fetchAllCalendarsByLocationId = async (
   req: Request,
@@ -53,22 +54,14 @@ export const fetchAllCalendarsByLocationId = async (
           params: { locationId },
         }
       );
-      console.log("response.data.calendars", response.data.calendars);
-      // const calendarIds = response.data.calendars
-      //   .filter((calendar: { isActive: boolean }) => calendar.isActive)
-      //   .map((calendar: { id: string; name: string }) => ({
-      //     id: calendar.id,
-      //     name: calendar.name,
-      //   }));
 
-      const calendarIds = response.data.calendars.map(
-        (calendar: { id: string; name: string }) => ({
+      const calendarIds = response.data.calendars
+        .filter((calendar: { isActive: boolean }) => calendar.isActive)
+        .map((calendar: { id: string; name: string }) => ({
           id: calendar.id,
           name: calendar.name,
-        })
-      );
+        }));
 
-      console.log("calendarIds", calendarIds);
       return res
         .status(200)
         .json({ success: true, message: "", data: calendarIds });
@@ -220,7 +213,7 @@ export const fetchAndSaveCalendarInformation = async (
           response?.data?.calendar?.preBuffer || 0,
           response?.data?.calendar?.preBufferUnit
         ),
-        [CALENDAR_DATA.IS_ACTIVE]: response?.data?.calendar?.isActive || false,
+        [CALENDAR_DATA.IS_ACTIVE]: response?.data?.calendar?.isActive || true,
         [CALENDAR_DATA.GROUP_ID]: response?.data?.calendar?.groupId,
         [CALENDAR_DATA.SLUG]: response?.data?.calendar?.slug,
         [CALENDAR_DATA.APPOINTMENTS_PER_SLOT]:
@@ -318,7 +311,6 @@ async function saveOpenHoursToDB(
         let closeHour = hour.closeHour;
         let closeMinute = hour.closeMinute;
 
-        // Convert to UTC if the timezone is not UTC
         if (locationTimezone !== "UTC") {
           const openTime = DateTime.fromObject(
             { hour: openHour, minute: openMinute },
@@ -485,8 +477,8 @@ export const fetchAndSaveCalendarBookedSlot = async (
         [CALENDAR_BOOKED_SLOTS.GHL_LOCATION_ID]: event?.locationId,
         [CALENDAR_BOOKED_SLOTS.GHL_ASSIGNED_USER_ID]: event?.assignedUserId,
         [CALENDAR_BOOKED_SLOTS.GHL_CALENDAR_ID]: event?.calendarId,
-        [CALENDAR_BOOKED_SLOTS.START_TIME]: event?.startTime,
-        [CALENDAR_BOOKED_SLOTS.END_TIME]: event?.endTime,
+        [CALENDAR_BOOKED_SLOTS.START_TIME]: dayjs.utc(event?.startTime).unix(),
+        [CALENDAR_BOOKED_SLOTS.END_TIME]: dayjs.utc(event?.endTime).unix(),
       };
 
       try {
@@ -548,7 +540,7 @@ export const createGhlAppointment = async (
         },
       }
     );
-    return response?.data;
+    return { success: true, data: response?.data };
   } catch (error) {
     console.error("Error creating appointment", error);
     return {

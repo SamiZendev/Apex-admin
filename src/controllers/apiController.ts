@@ -7,6 +7,7 @@ import {
 } from "./../constants/tableAttributes";
 import { Request, Response } from "express";
 import {
+  insertData,
   matchByString,
   supabase,
   updateData,
@@ -24,10 +25,14 @@ import { BookedSlots, Calendar } from "../types/interfaces";
 import { retrieveAccessToken } from "../utils/helpers";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
+import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
+import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
 
 dayjs.extend(customParseFormat);
 dayjs.extend(utc);
 dayjs.extend(timezone);
+dayjs.extend(isSameOrAfter);
+dayjs.extend(isSameOrBefore);
 
 export const getDataById = async (req: Request, res: Response) => {
   try {
@@ -169,27 +174,28 @@ export const bookAppointment = async (req: Request, res: Response) => {
           "Missing one of the required fields: startTime, endTime, firstName, and email.",
       });
     }
-
     const currentUtcTimestamp = Math.floor(Date.now() / 1000);
 
-    const startTimeDate = new Date(Number(startTime) * 1000);
-    const endTimeDate = new Date(Number(endTime) * 1000);
-    const currentUtcDate = new Date(currentUtcTimestamp * 1000);
+    const userStartUTC = dayjs(startTime).utc();
+    const userEndUTC = dayjs(endTime).utc();
+    const selectedDay = userStartUTC.day();
 
-    if (Number(startTime) <= currentUtcTimestamp) {
+    const startUnix = dayjs(startTime).unix();
+    const endUnix = dayjs(endTime).unix();
+
+    if (Number(startUnix) <= currentUtcTimestamp) {
       return res
         .status(400)
         .json({ message: "Booking time must be in the future" });
     }
 
-    if (Number(endTime) <= Number(startTime)) {
+    if (Number(endUnix) <= Number(startUnix)) {
       return res
         .status(400)
         .json({ message: "End time must be after start time" });
     }
 
-    const bookingDuration = endTime - startTime;
-
+    const bookingDuration = endUnix - startUnix;
     const { data: calendars, error } = await supabase
       .from(SUPABASE_TABLE_NAME.CALENDAR_DATA)
       .select(
@@ -199,30 +205,42 @@ export const bookAppointment = async (req: Request, res: Response) => {
       .eq(CALENDAR_DATA.IS_ACTIVE, true);
 
     if (error || !calendars) {
-      return res.status(400).json({ success: false , data: {error , calendars} });
+      return res
+        .status(400)
+        .json({ success: false, data: { error, calendars } });
     }
 
     const availableCalendars = calendars?.filter((calendar) => {
       const openHours = calendar[SUPABASE_TABLE_NAME.CALENDAR_OPEN_HOURS];
 
-      return openHours.some((entry: any) => {
-        const openTime = new Date(startTimeDate);
-        openTime.setUTCHours(
-          entry[CALENDAR_OPEN_HOURS.OPEN_HOUR],
-          entry[CALENDAR_OPEN_HOURS.OPEN_MINUTE],
-          0,
-          0
-        );
+      const todaysOpenings = openHours.filter((entry: any) => {
+        return entry[CALENDAR_OPEN_HOURS.DAY_OF_THE_WEEK] === selectedDay;
+      });
 
-        const closeTime = new Date(endTimeDate);
-        closeTime.setUTCHours(
-          entry[CALENDAR_OPEN_HOURS.CLOSE_HOUR],
-          entry[CALENDAR_OPEN_HOURS.CLOSE_MINUTE],
-          0,
-          0
-        );
+      return todaysOpenings.some((entry: any) => {
+        const dateStr = userStartUTC.format("YYYY-MM-DD");
 
-        return startTimeDate >= openTime && endTimeDate <= closeTime;
+        const openTimeUTC = dayjs
+          .utc(`${dateStr}T00:00:00Z`)
+          .set("hour", entry[CALENDAR_OPEN_HOURS.OPEN_HOUR])
+          .set("minute", entry[CALENDAR_OPEN_HOURS.OPEN_MINUTE]);
+
+        let closeTimeUTC = dayjs
+          .utc(`${dateStr}T00:00:00Z`)
+          .set("hour", entry[CALENDAR_OPEN_HOURS.CLOSE_HOUR])
+          .set("minute", entry[CALENDAR_OPEN_HOURS.CLOSE_MINUTE]);
+
+        if (
+          entry[CALENDAR_OPEN_HOURS.CLOSE_HOUR] === 0 &&
+          entry[CALENDAR_OPEN_HOURS.CLOSE_MINUTE] === 0
+        ) {
+          closeTimeUTC = closeTimeUTC.add(1, "day");
+        }
+
+        return (
+          userStartUTC.isSameOrAfter(openTimeUTC) &&
+          userEndUTC.isSameOrBefore(closeTimeUTC)
+        );
       });
     });
 
@@ -279,20 +297,44 @@ export const bookAppointment = async (req: Request, res: Response) => {
         calendarId: sortedCalendars[0]?.[CALENDAR_DATA.CALENDAR_ID],
         locationId: locationId,
         contactId: contact?.id,
-        startTime: dayjs
-          .unix(Number(startTime))
-          .tz(locationBasedTimezone)
-          .format(),
-        endTime: dayjs.unix(Number(endTime)).tz(locationBasedTimezone).format(),
+        startTime: dayjs(startTime).tz(locationBasedTimezone).format(),
+        endTime: dayjs(endTime).tz(locationBasedTimezone).format(),
       },
       access_token
     );
 
-    return res.status(200).json({
+    if (appointment.success) {
+      const matchedCalendar = calendars.find(
+        (calendar) =>
+          calendar[CALENDAR_DATA.CALENDAR_ID] === appointment?.data?.calendarId
+      );
+
+      await insertData(SUPABASE_TABLE_NAME.CALENDAR_BOOKED_SLOTS, {
+        [CALENDAR_BOOKED_SLOTS.APPOINTMNET_STATUS]:
+          appointment?.data?.appoinmentStatus,
+        [CALENDAR_BOOKED_SLOTS.GHL_EVENT_ID]: appointment?.data?.id,
+        [CALENDAR_BOOKED_SLOTS.GHL_ASSIGNED_USER_ID]:
+          appointment?.data?.assignedUserId,
+        [CALENDAR_BOOKED_SLOTS.GHL_CALENDAR_ID]: appointment?.data?.calendarId,
+        [CALENDAR_BOOKED_SLOTS.GHL_CONTACT_ID]: appointment?.data?.contactId,
+        [CALENDAR_BOOKED_SLOTS.START_TIME]: startUnix,
+        [CALENDAR_BOOKED_SLOTS.END_TIME]: endUnix,
+        [CALENDAR_BOOKED_SLOTS.GHL_LOCATION_ID]: locationId,
+      });
+
+      return res.status(200).json({
+        success: true,
+        redirectURL:
+          matchedCalendar[SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS][0]?.[
+            GHL_ACCOUNT_DETAILS.REDIRECT_URL
+          ],
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
       calendarId: sortedCalendars[0]?.[CALENDAR_DATA.CALENDAR_ID],
       locationId: locationId,
-      contactId: contact?.id,
-      booked: { ...appointment },
     });
   } catch (error) {}
 };
@@ -365,14 +407,14 @@ const filterAvailableCalendars = (
           (slot) => slot?.ghl_assigned_user_id === member.user_id
         );
 
-        const isBusy = memberBookings?.some((slot) =>
+        const isBusy = memberBookings?.some((slot) => {
           isOverlapping(
             requestedStart,
             requestedEnd,
             slot?.start_time,
             slot?.end_time
-          )
-        );
+          );
+        });
 
         return !isBusy;
       });
