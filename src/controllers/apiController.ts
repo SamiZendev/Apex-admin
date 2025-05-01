@@ -68,7 +68,7 @@ export const configureSubaccount = async (req: Request, res: Response) => {
       [GHL_ACCOUNT_DETAILS.GHL_ID]: z.string().min(1, "ghl_id is required"),
       [GHL_ACCOUNT_DETAILS.SPEND_AMOUNT]: z.string(),
       [GHL_ACCOUNT_DETAILS.GHL_CALENDAR_ID]: z.string(),
-      [GHL_ACCOUNT_DETAILS.PRIORITY_SCORE]: z.string(),
+      // [GHL_ACCOUNT_DETAILS.PRIORITY_SCORE]: z.string(),
       [GHL_ACCOUNT_DETAILS.PHONE]: z.string().optional(),
       [GHL_ACCOUNT_DETAILS.NAME]: z.string().optional(),
       [GHL_ACCOUNT_DETAILS.EMAIL]: z.string().email().optional(),
@@ -440,18 +440,18 @@ const sortCalendars = (calendars: any[]) => {
       return bookedSlotsA - bookedSlotsB;
     }
 
-    const priorityA = parseInt(
-      a.ghl_account_details?.[0]?.priority_score || "0",
-      10
-    );
-    const priorityB = parseInt(
-      b.ghl_account_details?.[0]?.priority_score || "0",
-      10
-    );
+    // const priorityA = parseInt(
+    //   a.ghl_account_details?.[0]?.priority_score || "0",
+    //   10
+    // );
+    // const priorityB = parseInt(
+    //   b.ghl_account_details?.[0]?.priority_score || "0",
+    //   10
+    // );
 
-    if (priorityA !== priorityB) {
-      return priorityB - priorityA;
-    }
+    // if (priorityA !== priorityB) {
+    //   return priorityB - priorityA;
+    // }
 
     const spendA = parseFloat(a.ghl_account_details?.[0]?.spend_amount || "0");
     const spendB = parseFloat(b.ghl_account_details?.[0]?.spend_amount || "0");
