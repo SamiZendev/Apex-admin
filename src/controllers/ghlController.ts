@@ -117,7 +117,6 @@ export const fetchCompanyInformation = async (companyId: string) => {
         }
       }
     }
-    console.log("access_token", access_token);
     const response = await axios.get(
       `${process.env.GHL_API_BASE_URL}/companies/${companyId}`,
       {
@@ -575,6 +574,47 @@ export const createGhlContact = async (
       success: false,
       error: "Failed to create contact",
       details: error,
+    };
+  }
+};
+
+export const fetchCalendarAvailableSlots = async (
+  calendarId: string,
+  locationId: string,
+  startDate: number,
+  endDate: number,
+  timezone: string
+) => {
+  try {
+    if (!calendarId || !locationId) {
+      return { success: false, error: "Missing calendarId or locationId" };
+    }
+    const access_token = await retrieveAccessToken(locationId as string);
+
+    if (access_token) {
+      const response = await axios.get(
+        `${process.env.GHL_API_BASE_URL}/calendars/${calendarId}/free-slots`,
+        {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${access_token}`,
+            Version: process.env.GHL_API_VERSION,
+          },
+          params: { startDate, endDate, timezone },
+        }
+      );
+
+      return { success: true, data: response.data };
+    }
+    return { success: false, message: "Data not saved into database" };
+  } catch (error: any) {
+    console.error(
+      "Error fetching company details:",
+      error?.response?.data || error.message
+    );
+    return {
+      error: "Failed to fetch company details",
+      details: error?.response?.data || error.message,
     };
   }
 };

@@ -18,6 +18,7 @@ import {
   createGhlContact,
   fetchAndSaveCalendarBookedSlot,
   fetchAndSaveCalendarInformation,
+  fetchCalendarAvailableSlots,
 } from "./ghlController";
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
@@ -165,35 +166,25 @@ export const getListOfAllSubaccountByCompanyId = async (
   }
 };
 
-export const bookAppointment = async (req: Request, res: Response) => {
+export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
+  req: Request,
+  res: Response
+) => {
   try {
-    const { firstName, lastName, email, phone, startTime, endTime } = req.body;
-    if (!startTime || !endTime || !firstName || !email) {
+    const { startTime, endTime } = req.body;
+    if (!startTime || !endTime) {
       return res.status(400).json({
-        message:
-          "Missing one of the required fields: startTime, endTime, firstName, and email.",
+        message: "Missing one of the required fields: startTime, endTime",
       });
     }
-    const currentUtcTimestamp = Math.floor(Date.now() / 1000);
-
     const userStartUTC = dayjs(startTime).utc();
     const userEndUTC = dayjs(endTime).utc();
     const selectedDay = userStartUTC.day();
-
     const startUnix = dayjs(startTime).unix();
     const endUnix = dayjs(endTime).unix();
-
-    if (Number(startUnix) <= currentUtcTimestamp) {
-      return res
-        .status(400)
-        .json({ message: "Booking time must be in the future" });
-    }
-
-    if (Number(endUnix) <= Number(startUnix)) {
-      return res
-        .status(400)
-        .json({ message: "End time must be after start time" });
-    }
+    const startDateMillis = dayjs.utc(userStartUTC).valueOf();
+    const endDateMillis = dayjs.utc(userEndUTC).valueOf();
+    const bookingDate = dayjs(startTime).format("YYYY-MM-DD");
 
     const bookingDuration = endUnix - startUnix;
     const { data: calendars, error } = await supabase
@@ -262,15 +253,71 @@ export const bookAppointment = async (req: Request, res: Response) => {
       endTime
     );
     const sortedCalendars = sortCalendars(filteredCalendars);
-    const locationId =
-      sortedCalendars[0]?.[SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS][0]?.[
-        GHL_ACCOUNT_DETAILS.GHL_ID
-      ];
+
+    const calendarsWithSlot = await Promise.all(
+      sortedCalendars.map(async (calendar) => {
+        const slotAvailability = await fetchCalendarAvailableSlots(
+          calendar[CALENDAR_DATA.CALENDAR_ID],
+          calendar[CALENDAR_DATA.GHL_LOCATION_ID],
+          startDateMillis,
+          endDateMillis,
+          "GMT"
+        );
+        if (slotAvailability?.success && slotAvailability?.data) {
+          const slots = slotAvailability.data?.[bookingDate]?.slots || [];
+          if (slots.includes(userStartUTC.toISOString().replace(".000", ""))) {
+            return calendar;
+          }
+        }
+        return null;
+      })
+    );
+
+    const calendarSlots = calendarsWithSlot.filter(Boolean);
+
+    return res.status(200).json({
+      success: true,
+      message: "Calendars fetched successfully",
+      calendars: calendarSlots,
+    });
+  } catch (error) {
+    console.error("Error fetching data:", error);
+    return res.status(500).json({
+      success: false,
+      error,
+    });
+  }
+};
+
+export const bookAppointment = async (req: Request, res: Response) => {
+  try {
+    const {
+      firstName,
+      lastName,
+      email,
+      phone,
+      startTime,
+      endTime,
+      locationId,
+    } = req.body;
+    if (!startTime || !endTime || !firstName || !email || !locationId) {
+      return res.status(400).json({
+        message:
+          "Missing one of the required fields: startTime, endTime, firstName and email.",
+      });
+    }
     const access_token = await retrieveAccessToken(locationId);
-    const locationBasedTimezone =
-      sortedCalendars[0]?.[SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS][0]?.[
-        GHL_ACCOUNT_DETAILS.GHL_LOCATION_TIMEZONE
-      ];
+    const { data: subaccountData, error } = await supabase
+      .from(SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS)
+      .select(`*,${SUPABASE_TABLE_NAME.CALENDAR_DATA}(*)`)
+      .eq(GHL_ACCOUNT_DETAILS.GHL_ID, locationId);
+
+    if (error || !subaccountData) {
+      return res.status(404).json({
+        success: false,
+        message: "Subaccount not found",
+      });
+    }
 
     const contact = await createGhlContact(
       {
@@ -294,46 +341,29 @@ export const bookAppointment = async (req: Request, res: Response) => {
 
     const appointment = await createGhlAppointment(
       {
-        calendarId: sortedCalendars[0]?.[CALENDAR_DATA.CALENDAR_ID],
+        calendarId: subaccountData[0]?.[GHL_ACCOUNT_DETAILS.GHL_CALENDAR_ID],
         locationId: locationId,
         contactId: contact?.id,
-        startTime: dayjs(startTime).tz(locationBasedTimezone).format(),
-        endTime: dayjs(endTime).tz(locationBasedTimezone).format(),
+        startTime: dayjs(startTime)
+          .tz(subaccountData[0]?.[GHL_ACCOUNT_DETAILS.GHL_LOCATION_TIMEZONE])
+          .format(),
+        endTime: dayjs(endTime)
+          .tz(subaccountData[0]?.[GHL_ACCOUNT_DETAILS.GHL_LOCATION_TIMEZONE])
+          .format(),
       },
       access_token
     );
 
     if (appointment.success) {
-      const matchedCalendar = calendars.find(
-        (calendar) =>
-          calendar[CALENDAR_DATA.CALENDAR_ID] === appointment?.data?.calendarId
-      );
-
-      await insertData(SUPABASE_TABLE_NAME.CALENDAR_BOOKED_SLOTS, {
-        [CALENDAR_BOOKED_SLOTS.APPOINTMNET_STATUS]:
-          appointment?.data?.appoinmentStatus,
-        [CALENDAR_BOOKED_SLOTS.GHL_EVENT_ID]: appointment?.data?.id,
-        [CALENDAR_BOOKED_SLOTS.GHL_ASSIGNED_USER_ID]:
-          appointment?.data?.assignedUserId,
-        [CALENDAR_BOOKED_SLOTS.GHL_CALENDAR_ID]: appointment?.data?.calendarId,
-        [CALENDAR_BOOKED_SLOTS.GHL_CONTACT_ID]: appointment?.data?.contactId,
-        [CALENDAR_BOOKED_SLOTS.START_TIME]: startUnix,
-        [CALENDAR_BOOKED_SLOTS.END_TIME]: endUnix,
-        [CALENDAR_BOOKED_SLOTS.GHL_LOCATION_ID]: locationId,
-      });
-
       return res.status(200).json({
         success: true,
-        redirectURL:
-          matchedCalendar[SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS][0]?.[
-            GHL_ACCOUNT_DETAILS.REDIRECT_URL
-          ],
+        redirectURL: subaccountData[0]?.[GHL_ACCOUNT_DETAILS.REDIRECT_URL],
       });
     }
 
     return res.status(400).json({
       success: false,
-      calendarId: sortedCalendars[0]?.[CALENDAR_DATA.CALENDAR_ID],
+      calendarId: subaccountData[0]?.[GHL_ACCOUNT_DETAILS.GHL_CALENDAR_ID],
       locationId: locationId,
     });
   } catch (error) {}

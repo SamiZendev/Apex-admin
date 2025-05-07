@@ -19,6 +19,7 @@ import { fetchSubaccountInformation } from "./ghlController";
 import { AppointmentWebhookData, GHLSubaccountAuth } from "@/types/interfaces";
 import { isTokenExpired } from "../utils/helpers";
 import { refreshAuth } from "./authController";
+import dayjs from "dayjs";
 
 const generateAccessToken = async (
   data: any
@@ -211,12 +212,17 @@ const appointmentCreate = async (
       .insert({
         [CALENDAR_BOOKED_SLOTS.APPOINTMNET_STATUS]:
           data?.appointment?.appointmentStatus,
+        [CALENDAR_BOOKED_SLOTS.GHL_EVENT_ID]: data?.appointment?.id,
         [CALENDAR_BOOKED_SLOTS.GHL_CALENDAR_ID]: data?.appointment?.calendarId,
         [CALENDAR_BOOKED_SLOTS.GHL_LOCATION_ID]: data?.locationId,
         [CALENDAR_BOOKED_SLOTS.GHL_ASSIGNED_USER_ID]:
           data?.appointment?.assignedUserId,
-        [CALENDAR_BOOKED_SLOTS.START_TIME]: data?.appointment?.startTime,
-        [CALENDAR_BOOKED_SLOTS.END_TIME]: data?.appointment?.endTime,
+        [CALENDAR_BOOKED_SLOTS.START_TIME]: dayjs(
+          data?.appointment?.startTime
+        ).unix(),
+        [CALENDAR_BOOKED_SLOTS.END_TIME]: dayjs(
+          data?.appointment?.endTime
+        ).unix(),
         [CALENDAR_BOOKED_SLOTS.GHL_CONTACT_ID]: data?.appointment?.contactId,
       })
       .select();
@@ -235,10 +241,97 @@ const appointmentCreate = async (
   }
 };
 
+const appointmentUpdate = async (
+  data: AppointmentWebhookData
+): Promise<{ success: boolean; message?: string; booked_slot?: any }> => {
+  try {
+    const nowUTC = new Date().toISOString();
+    const startTime = data?.appointment?.startTime;
+    const eventId = data?.appointment?.id;
+
+    if (!startTime || nowUTC >= startTime || !eventId) {
+      return {
+        success: false,
+        message: "Invalid or past appointment time or missing event ID.",
+      };
+    }
+
+    const updateData = {
+      [CALENDAR_BOOKED_SLOTS.APPOINTMNET_STATUS]:
+        data?.appointment?.appointmentStatus,
+      [CALENDAR_BOOKED_SLOTS.GHL_CALENDAR_ID]: data?.appointment?.calendarId,
+      [CALENDAR_BOOKED_SLOTS.GHL_LOCATION_ID]: data?.locationId,
+      [CALENDAR_BOOKED_SLOTS.GHL_ASSIGNED_USER_ID]:
+        data?.appointment?.assignedUserId,
+      [CALENDAR_BOOKED_SLOTS.START_TIME]: dayjs(
+        data?.appointment?.startTime
+      ).unix(),
+      [CALENDAR_BOOKED_SLOTS.END_TIME]: dayjs(
+        data?.appointment?.endTime
+      ).unix(),
+      [CALENDAR_BOOKED_SLOTS.GHL_CONTACT_ID]: data?.appointment?.contactId,
+      [CALENDAR_BOOKED_SLOTS.GHL_EVENT_ID]: eventId,
+    };
+
+    const { data: booked_slot, error } = await supabase
+      .from(SUPABASE_TABLE_NAME.CALENDAR_BOOKED_SLOTS)
+      .update(updateData)
+      .eq(CALENDAR_BOOKED_SLOTS.GHL_EVENT_ID, eventId)
+      .eq(CALENDAR_BOOKED_SLOTS.GHL_LOCATION_ID, data?.locationId);
+
+    if (error) {
+      throw error;
+    }
+    return { success: true, booked_slot: booked_slot };
+  } catch (error) {
+    console.error("Error in updating bookedSlots", error);
+    return {
+      success: false,
+      message: "Internal Server Error",
+      booked_slot: error,
+    };
+  }
+};
+
+const appointmentDelete = async (
+  data: AppointmentWebhookData
+): Promise<{ success: boolean; message?: string; booked_slot?: any }> => {
+  try {
+    const nowUTC = new Date().toISOString();
+    const startTime = data?.appointment?.startTime;
+    const eventId = data?.appointment?.id;
+
+    if (nowUTC >= startTime) {
+      return {
+        success: false,
+        message: "Cannot delete a past or ongoing appointment.",
+      };
+    }
+
+    const { error } = await supabase
+      .from(SUPABASE_TABLE_NAME.CALENDAR_BOOKED_SLOTS)
+      .delete()
+      .eq(CALENDAR_BOOKED_SLOTS.GHL_EVENT_ID, eventId);
+
+    if (error) {
+      throw error;
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in deleting bookedSlots", error);
+    return {
+      success: false,
+      message: "Internal Server Error",
+      booked_slot: error,
+    };
+  }
+};
+
 export const handleWebhook = async (req: Request, res: Response) => {
   try {
     const { type } = req.body;
-
+    console.log(type, "type");
     switch (type) {
       case "INSTALL":
         const installResponse = await generateAccessToken(req.body);
@@ -259,7 +352,23 @@ export const handleWebhook = async (req: Request, res: Response) => {
             .status(400)
             .json({ message: appointmentCreateResponse.message });
         }
-        return res.json({ message: "Token generated and saved successfully." });
+        return res.json({ message: "Data saved successfully" });
+      case "AppointmentUpdate":
+        const appointmentUpdateResponse = await appointmentUpdate(req.body);
+        if (!appointmentUpdateResponse.success) {
+          return res
+            .status(400)
+            .json({ message: appointmentUpdateResponse.message });
+        }
+        return res.json({ message: "Data saved successfully" });
+      case "AppointmentDelete":
+        const appointmentDeleteResponse = await appointmentDelete(req.body);
+        if (!appointmentDeleteResponse.success) {
+          return res
+            .status(400)
+            .json({ message: appointmentDeleteResponse.message });
+        }
+        return res.json({ message: "Data saved successfully" });
       default:
         return res.status(400).json({ message: "Unhandled webhook type." });
     }

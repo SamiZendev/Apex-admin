@@ -2,6 +2,7 @@ import { fetchAllCalendarsByLocationId } from "../controllers/ghlController";
 import {
   bookAppointment,
   configureSubaccount,
+  getCalendarAndSubaccountByBookingAppointmentDetails,
   getDataById,
   getListOfAllSubaccountByCompanyId,
   getTimezones,
@@ -19,6 +20,7 @@ router.get(
 router.get("/fetchAllCalendarsByLocationId", fetchAllCalendarsByLocationId);
 router.put("/configureAccount", configureSubaccount);
 router.post("/login", signInUsingPassword);
+router.post("/fetchSlots", getCalendarAndSubaccountByBookingAppointmentDetails);
 router.post("/booking", bookAppointment);
 router.get("/timezone", getTimezones);
 
