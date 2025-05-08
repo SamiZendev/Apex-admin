@@ -22,6 +22,7 @@ export const GHL_ACCOUNT_DETAILS = {
   GHL_COMPANY_ID: "ghl_company_id",
   GHL_CALENDAR_ID: "ghl_calendar_id",
   GHL_LOCATION_TIMEZONE: "ghl_location_timezone",
+  GHL_CUSTOM_FIELD_ID: "ghl_custom_field_id",
 } as const;
 
 export const CALENDAR_DATA = {
@@ -82,4 +83,9 @@ export const USER_DATA = {
   EMAIL: "email",
   PASSWORD: "password",
   GHL_COMPANY_ID: "ghl_company_id",
+} as const;
+
+export const UTM_PARAMETERS = {
+  ID: "id",
+  UTM_PARAMETER: "utm_parameter",
 } as const;

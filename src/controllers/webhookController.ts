@@ -15,7 +15,7 @@ import {
   GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE,
   SUPABASE_TABLE_NAME,
 } from "../utils/constant";
-import { fetchSubaccountInformation } from "./ghlController";
+import { createCustomField, fetchSubaccountInformation } from "./ghlController";
 import { AppointmentWebhookData, GHLSubaccountAuth } from "@/types/interfaces";
 import { isTokenExpired } from "../utils/helpers";
 import { refreshAuth } from "./authController";
@@ -109,6 +109,10 @@ const generateAccessToken = async (
       );
 
       const subaccount = await fetchSubaccountInformation(locationId);
+      const subaccountCustomField = await createCustomField(
+        locationId,
+        response?.data?.access_token
+      );
       const accountDetails = {
         [GHL_ACCOUNT_DETAILS.AUTH_ID]: supabaseResponse?.responseData?.[0]?.id,
         [GHL_ACCOUNT_DETAILS.PHONE]: subaccount?.location?.phone || "",
@@ -119,6 +123,7 @@ const generateAccessToken = async (
           subaccount?.location?.companyId || "",
         [GHL_ACCOUNT_DETAILS.GHL_LOCATION_TIMEZONE]:
           subaccount?.location?.timezone || "UTC",
+        [GHL_ACCOUNT_DETAILS.GHL_CUSTOM_FIELD_ID]: subaccountCustomField?.id,
       };
 
       const responseAccountDetails = await insertData(

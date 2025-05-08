@@ -33,7 +33,7 @@ const redirectURI = process.env.GHL_REDIRECT_URI;
 const SECRET_KEY = process.env.JWT_SECRET as string;
 
 export const initiateAuth = (req: Request, res: Response) => {
-  const authUrl = `${baseURL}/oauth/chooselocation?response_type=code&redirect_uri=${redirectURI}&client_id=${clientId}&scope=calendars.readonly calendars.write calendars/events.readonly calendars/events.write calendars/groups.readonly calendars/groups.write calendars/resources.readonly calendars/resources.write contacts.readonly contacts.write locations.readonly companies.readonly`;
+  const authUrl = `${baseURL}/oauth/chooselocation?response_type=code&redirect_uri=${redirectURI}&client_id=${clientId}&scope=calendars.readonly calendars.write calendars/events.readonly calendars/events.write calendars/groups.readonly calendars/groups.write calendars/resources.readonly calendars/resources.write contacts.readonly contacts.write locations.readonly companies.readonly locations/customFields.write locations/customFields.readonly locations/customValues.write locations/customValues.readonly`;
   res.redirect(authUrl);
 };
 

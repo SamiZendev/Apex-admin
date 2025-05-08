@@ -618,3 +618,37 @@ export const fetchCalendarAvailableSlots = async (
     };
   }
 };
+
+export const createCustomField = async (
+  locationId: string,
+  access_token: string
+) => {
+  try {
+    const response = await axios.post(
+      `${process.env.GHL_API_BASE_URL}/locations/${locationId}/customFields`,
+      {
+        name: `${process.env.GHL_APP_NAME} UTM`,
+        dataType: "TEXT",
+      },
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${access_token}`,
+          "Content-Type": "application/json",
+          Version: process.env.GHL_API_VERSION || "2021-07-28",
+        },
+      }
+    );
+    return response.data?.customField;
+  } catch (error: any) {
+    console.error(
+      "Error creating custom field:",
+      error?.response?.data || error
+    );
+    return {
+      success: false,
+      error: "Failed to create custom field",
+      details: error?.response?.data || error,
+    };
+  }
+};

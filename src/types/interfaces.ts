@@ -33,7 +33,7 @@ export interface AppointmentData {
   toNotify?: boolean;
   ignoreFreeSlotValidation?: boolean;
   rrule?: string;
-  id?: string
+  id?: string;
 }
 
 export interface OpenHours {
@@ -72,6 +72,11 @@ export interface ContactData {
   locationId: string;
   phone?: string;
   source?: string;
+  customFields?: [
+    {
+      [key: string]: string | number | boolean;
+    }
+  ];
 }
 
 export interface AppointmentWebhookData {

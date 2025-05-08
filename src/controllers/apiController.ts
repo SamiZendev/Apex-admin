@@ -299,6 +299,7 @@ export const bookAppointment = async (req: Request, res: Response) => {
       startTime,
       endTime,
       locationId,
+      utmParams,
     } = req.body;
     if (!startTime || !endTime || !firstName || !email || !locationId) {
       return res.status(400).json({
@@ -327,6 +328,12 @@ export const bookAppointment = async (req: Request, res: Response) => {
         phone: phone,
         locationId: locationId,
         source: process.env.GHL_APP_NAME as string,
+        customFields: [
+          {
+            id: subaccountData[0]?.[GHL_ACCOUNT_DETAILS.GHL_CUSTOM_FIELD_ID],
+            value: JSON.stringify(utmParams),
+          },
+        ],
       },
       access_token
     );

@@ -7,6 +7,7 @@ export const SUPABASE_TABLE_NAME = {
   CALENDAR_BOOKED_SLOTS: "calendar_booked_slots",
   USERS: "users",
   TIMEZONE: "timezone",
+  UTM_PARAMETERS: "utm_parameters",
 } as const;
 
 export const GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE = {
