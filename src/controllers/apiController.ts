@@ -71,6 +71,8 @@ export const configureSubaccount = async (req: Request, res: Response) => {
       [GHL_ACCOUNT_DETAILS.GHL_CALENDAR_ID]: z.string(),
       // [GHL_ACCOUNT_DETAILS.PRIORITY_SCORE]: z.string(),
       [GHL_ACCOUNT_DETAILS.PHONE]: z.string().optional(),
+      [GHL_ACCOUNT_DETAILS.STATE]: z.string().optional(),
+      [GHL_ACCOUNT_DETAILS.ASSEST_MINIMUM]: z.string().optional(),
       [GHL_ACCOUNT_DETAILS.NAME]: z.string().optional(),
       [GHL_ACCOUNT_DETAILS.EMAIL]: z.string().email().optional(),
       [GHL_ACCOUNT_DETAILS.REDIRECT_URL]: z.string().url(),

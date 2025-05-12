@@ -23,6 +23,8 @@ export const GHL_ACCOUNT_DETAILS = {
   GHL_CALENDAR_ID: "ghl_calendar_id",
   GHL_LOCATION_TIMEZONE: "ghl_location_timezone",
   GHL_CUSTOM_FIELD_ID: "ghl_custom_field_id",
+  STATE: "state",
+  ASSEST_MINIMUM: "assest_minimum",
 } as const;
 
 export const CALENDAR_DATA = {
