@@ -5,6 +5,7 @@ import {
   getCalendarAndSubaccountByBookingAppointmentDetails,
   getDataById,
   getListOfAllSubaccountByCompanyId,
+  getStates,
   getTimezones,
 } from "../controllers/apiController";
 import express from "express";
@@ -35,5 +36,6 @@ router.get("/fetchUTM", getAllUTM);
 router.get("/getUTMById/:id", getUTMById);
 router.put("/utm/:id", updateUTM);
 router.delete("/utm/:id", deleteUTM);
+router.get("/states", getStates);
 
 export default router;

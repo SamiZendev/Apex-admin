@@ -25,6 +25,7 @@ export const GHL_ACCOUNT_DETAILS = {
   GHL_CUSTOM_FIELD_ID: "ghl_custom_field_id",
   STATE: "state",
   ASSEST_MINIMUM: "assest_minimum",
+  CONDITION: "condition",
 } as const;
 
 export const CALENDAR_DATA = {

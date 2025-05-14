@@ -7,7 +7,7 @@ import cron from "node-cron";
 
 export const updateCalendarConfiguration = () => {
   cron.schedule("0 0 * * *", async () => {
-    logErrorToFile("Updateing calendar data");
+    logErrorToFile("Updating calendar data");
     const { data: calendar_data, error } = await supabase
       .from(SUPABASE_TABLE_NAME.CALENDAR_DATA)
       .select("*");
