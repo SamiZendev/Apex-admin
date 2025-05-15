@@ -92,3 +92,9 @@ export const UTM_PARAMETERS = {
   ID: "id",
   UTM_PARAMETER: "utm_parameter",
 } as const;
+
+export const STATES = {
+  ID: "id",
+  STATE: "state",
+  STATE_ABBREVIATION: "state_abbreviation",
+} as const;

@@ -4,6 +4,7 @@ import {
   CALENDAR_DATA,
   CALENDAR_OPEN_HOURS,
   GHL_ACCOUNT_DETAILS,
+  STATES,
 } from "./../constants/tableAttributes";
 import { Request, Response } from "express";
 import {
@@ -174,7 +175,7 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
   res: Response
 ) => {
   try {
-    const { startTime, endTime } = req.body;
+    const { startTime, endTime, utmParams } = req.body;
     if (!startTime || !endTime) {
       return res.status(400).json({
         message: "Missing one of the required fields: startTime, endTime",
@@ -188,6 +189,32 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
     const startDateMillis = dayjs.utc(userStartUTC).valueOf();
     const endDateMillis = dayjs.utc(userEndUTC).valueOf();
     const bookingDate = dayjs(startTime).format("YYYY-MM-DD");
+    const { state: utmState, assest_minimum: utmAssetMin } = utmParams;
+    const shouldCheckState =
+      utmState && utmState.trim().toUpperCase() !== "ALL";
+
+    let matchedStateIds: string[] = [];
+
+    if (shouldCheckState) {
+      const { data: matchedStates, error: stateError } = await supabase
+        .from(SUPABASE_TABLE_NAME.STATES)
+        .select("*")
+        .or(
+          `${[STATES.STATE]}.ilike.${utmState},${[
+            STATES.STATE_ABBREVIATION,
+          ]}.ilike.${utmState}`
+        );
+
+      if (stateError) {
+        return res.status(400).json({
+          success: false,
+          message: "Error fetching state data",
+          error: stateError,
+        });
+      }
+
+      matchedStateIds = matchedStates?.map((s) => s.id) || [];
+    }
 
     const bookingDuration = endUnix - startUnix;
     const { data: calendars, error } = await supabase
@@ -238,7 +265,39 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
       });
     });
 
-    let availableCalendarIds = availableCalendars?.map(
+    const filterByUtmParams = availableCalendars.filter((calendar) => {
+      const accountDetails = calendar[SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS];
+      if (!accountDetails) return false;
+
+      const calendarStateIds =
+        accountDetails[0][GHL_ACCOUNT_DETAILS.STATE] || [];
+      const calendarAssetMin = parseFloat(
+        accountDetails[0][GHL_ACCOUNT_DETAILS.ASSEST_MINIMUM] || "0"
+      );
+      const condition = (
+        accountDetails[0][GHL_ACCOUNT_DETAILS.CONDITION] || "AND"
+      ).toUpperCase();
+
+      const stateMatch = shouldCheckState
+        ? calendarStateIds.some((id: string) => matchedStateIds.includes(id))
+        : true;
+
+      const assetMatch = utmAssetMin
+        ? calendarAssetMin >= parseFloat(utmAssetMin)
+        : true;
+
+      if (shouldCheckState && utmAssetMin) {
+        return condition === "AND"
+          ? stateMatch && assetMatch
+          : stateMatch || assetMatch;
+      } else if (shouldCheckState) {
+        return stateMatch;
+      } else {
+        return assetMatch;
+      }
+    });
+
+    let availableCalendarIds = filterByUtmParams?.map(
       (calendar) => calendar.calendar_id
     );
     const bookedSlots = await getBookedSlots(availableCalendarIds);
