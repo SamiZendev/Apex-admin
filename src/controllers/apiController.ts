@@ -4,11 +4,12 @@ import {
   CALENDAR_DATA,
   CALENDAR_OPEN_HOURS,
   GHL_ACCOUNT_DETAILS,
+  GHL_SUBACCOUNT_AUTH_ATTRIBUTES,
   STATES,
+  UTM_PARAMETERS,
 } from "./../constants/tableAttributes";
 import { Request, Response } from "express";
 import {
-  insertData,
   matchByString,
   supabase,
   updateData,
@@ -189,7 +190,7 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
     const startDateMillis = dayjs.utc(userStartUTC).valueOf();
     const endDateMillis = dayjs.utc(userEndUTC).valueOf();
     const bookingDate = dayjs(startTime).format("YYYY-MM-DD");
-    const { state: utmState, assest_minimum: utmAssetMin } = utmParams;
+    const { state: utmState, ...utmRest } = utmParams;
     const shouldCheckState =
       utmState && utmState.trim().toUpperCase() !== "ALL";
 
@@ -265,37 +266,52 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
       });
     });
 
-    const filterByUtmParams = availableCalendars.filter((calendar) => {
-      const accountDetails = calendar[SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS];
-      if (!accountDetails) return false;
+    const filterByUtmParams = await Promise.all(
+      availableCalendars.map(async (calendar) => {
+        const accountDetails =
+          calendar[SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS];
+        let dynamicKey = "";
+        if (!accountDetails) return false;
 
-      const calendarStateIds =
-        accountDetails[0][GHL_ACCOUNT_DETAILS.STATE] || [];
-      const calendarAssetMin = parseFloat(
-        accountDetails[0][GHL_ACCOUNT_DETAILS.ASSEST_MINIMUM] || "0"
-      );
-      const condition = (
-        accountDetails[0][GHL_ACCOUNT_DETAILS.CONDITION] || "AND"
-      ).toUpperCase();
+        const calendarStateIds =
+          accountDetails[0][GHL_ACCOUNT_DETAILS.STATE] || [];
+        const assetMinimumRaw =
+          accountDetails[0][GHL_ACCOUNT_DETAILS.ASSEST_MINIMUM];
+        if (!assetMinimumRaw) return false;
+        const [utmKeyId, value] = assetMinimumRaw.split(":");
 
-      const stateMatch = shouldCheckState
-        ? calendarStateIds.some((id: string) => matchedStateIds.includes(id))
-        : true;
+        const { data, error } = await supabase
+          .from(SUPABASE_TABLE_NAME.UTM_PARAMETERS)
+          .select(UTM_PARAMETERS.UTM_PARAMETER)
+          .eq(UTM_PARAMETERS.ID, utmKeyId)
+          .single();
 
-      const assetMatch = utmAssetMin
-        ? calendarAssetMin >= parseFloat(utmAssetMin)
-        : true;
+        if (data) {
+          dynamicKey = data[UTM_PARAMETERS.UTM_PARAMETER];
+        }
+        const utmValue = utmParams[dynamicKey];
 
-      if (shouldCheckState && utmAssetMin) {
-        return condition === "AND"
-          ? stateMatch && assetMatch
-          : stateMatch || assetMatch;
-      } else if (shouldCheckState) {
-        return stateMatch;
-      } else {
-        return assetMatch;
-      }
-    });
+        const condition = (
+          accountDetails[0][GHL_ACCOUNT_DETAILS.CONDITION] || "AND"
+        ).toUpperCase();
+
+        const stateMatch = shouldCheckState
+          ? calendarStateIds.some((id: string) => matchedStateIds.includes(id))
+          : true;
+
+        const assetMatch = utmValue ? value >= parseFloat(utmValue) : true;
+
+        if (shouldCheckState && utmValue) {
+          return condition === "AND"
+            ? stateMatch && assetMatch
+            : stateMatch || assetMatch;
+        } else if (shouldCheckState) {
+          return stateMatch;
+        } else {
+          return assetMatch;
+        }
+      })
+    );
 
     let availableCalendarIds = filterByUtmParams?.map(
       (calendar) => calendar.calendar_id
@@ -584,5 +600,43 @@ export const getStates = async (req: Request, res: Response) => {
       success: false,
       error,
     });
+  }
+};
+
+export const deleteAccount = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const [
+      { error: error1 },
+      { error: error2 },
+      { error: error3 }
+    ] = await Promise.all([
+      supabase
+        .from(SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS)
+        .delete()
+        .eq(GHL_ACCOUNT_DETAILS.GHL_ID, id),
+
+      supabase
+        .from(SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE)
+        .delete()
+        .eq(GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID, id),
+
+      supabase
+        .from(SUPABASE_TABLE_NAME.CALENDAR_DATA)
+        .delete()
+        .eq(CALENDAR_DATA.GHL_LOCATION_ID, id)
+    ]);
+
+    const errors = [error1, error2, error3].filter(Boolean);
+
+    if (errors.length > 0) {
+      return res.status(500).json({ errors });
+    }
+
+    res.json({ message: "Account and related data deleted successfully." });
+  } catch (err) {
+    console.error("Unexpected error in deleteAccount:", err);
+    res.status(500).json({ error: "Unexpected error occurred while deleting the account." });
   }
 };

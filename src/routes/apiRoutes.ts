@@ -2,6 +2,7 @@ import { fetchAllCalendarsByLocationId } from "../controllers/ghlController";
 import {
   bookAppointment,
   configureSubaccount,
+  deleteAccount,
   getCalendarAndSubaccountByBookingAppointmentDetails,
   getDataById,
   getListOfAllSubaccountByCompanyId,
@@ -36,6 +37,7 @@ router.get("/fetchUTM", getAllUTM);
 router.get("/getUTMById/:id", getUTMById);
 router.put("/utm/:id", updateUTM);
 router.delete("/utm/:id", deleteUTM);
+router.delete("/account/:id", deleteAccount);
 router.get("/states", getStates);
 
 export default router;
