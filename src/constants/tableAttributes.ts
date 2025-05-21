@@ -7,6 +7,9 @@ export const GHL_SUBACCOUNT_AUTH_ATTRIBUTES = {
   ACCOUNT_TYPE: "account_type",
   IS_ACTIVE: "is_active",
   UPDATED_AT: "updated_at",
+  CALENDLY_OWNER: "calendly_owner",
+  CALENDLY_ORGANIZATION: "calendly_organization",
+  SOURCE: "source",
 } as const;
 
 export const GHL_ACCOUNT_DETAILS = {
@@ -23,6 +26,12 @@ export const GHL_ACCOUNT_DETAILS = {
   GHL_CALENDAR_ID: "ghl_calendar_id",
   GHL_LOCATION_TIMEZONE: "ghl_location_timezone",
   GHL_CUSTOM_FIELD_ID: "ghl_custom_field_id",
+  STATE: "state",
+  ASSEST_MINIMUM: "assest_minimum",
+  CONDITION: "condition",
+  ID: "id",
+  CALENDLY_SLUG: "calendly_slug",
+  CALENDLY_SCHEDULING_URL: "calendly_scheduling_url",
 } as const;
 
 export const CALENDAR_DATA = {
@@ -88,4 +97,10 @@ export const USER_DATA = {
 export const UTM_PARAMETERS = {
   ID: "id",
   UTM_PARAMETER: "utm_parameter",
+} as const;
+
+export const STATES = {
+  ID: "id",
+  STATE: "state",
+  STATE_ABBREVIATION: "state_abbreviation",
 } as const;

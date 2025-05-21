@@ -8,9 +8,15 @@ export const SUPABASE_TABLE_NAME = {
   USERS: "users",
   TIMEZONE: "timezone",
   UTM_PARAMETERS: "utm_parameters",
+  STATES: "states",
 } as const;
 
 export const GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE = {
   LOCATION: "location",
   COMPANY: "company",
+} as const;
+
+export const ACCOUNT_SOURCE = {
+  GHL: "ghl",
+  CALENDLY: "calendly",
 } as const;

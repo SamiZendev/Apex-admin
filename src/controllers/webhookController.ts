@@ -12,6 +12,7 @@ import {
   GHL_SUBACCOUNT_AUTH_ATTRIBUTES,
 } from "../constants/tableAttributes";
 import {
+  ACCOUNT_SOURCE,
   GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE,
   SUPABASE_TABLE_NAME,
 } from "../utils/constant";
@@ -83,6 +84,7 @@ const generateAccessToken = async (
         ? GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE.LOCATION
         : GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE.COMPANY,
       [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.IS_ACTIVE]: true,
+      [GHL_SUBACCOUNT_AUTH_ATTRIBUTES.SOURCE]: ACCOUNT_SOURCE.GHL,
     };
 
     let isExist = false,

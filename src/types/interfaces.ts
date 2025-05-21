@@ -8,9 +8,22 @@ export interface GHLSubaccountAuth {
   updated_at?: string;
   ghl_company_id: string;
   account_type: string;
+  source: string;
   is_active: boolean;
 }
-
+export interface CalendlyAccountAuth {
+  id?: string;
+  access_token: string;
+  refresh_token: string;
+  expires_in: string;
+  created_at?: string;
+  updated_at?: string;
+  calendly_owner?: string;
+  calendly_organization?: string;
+  source: string;
+  is_active: boolean;
+  ghl_location_id: string;
+}
 export interface RefreshAuthResponse {
   success: boolean;
   data?: GHLSubaccountAuth[];

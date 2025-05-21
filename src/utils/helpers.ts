@@ -1,8 +1,9 @@
 import { matchByString } from "../services/supabaseClient";
 import crypto from "crypto";
-import { SUPABASE_TABLE_NAME } from "./constant";
+import { ACCOUNT_SOURCE, SUPABASE_TABLE_NAME } from "./constant";
 import { GHL_SUBACCOUNT_AUTH_ATTRIBUTES } from "../constants/tableAttributes";
 import { refreshAuth } from "../controllers/authController";
+import { refreshToken } from "../controllers/calendly/authController";
 
 export const isTokenExpired = (issued_at: string, expires_in: string) => {
   const currentTime = Math.floor(Date.now() / 1000);
@@ -72,12 +73,29 @@ export const retrieveAccessToken = async (ghl_id: string) => {
           existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.EXPIRES_IN]
         )
       ) {
-        const refreshTokenResponse = await refreshAuth(
-          ghl_id,
-          existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE]
-        );
+        let refreshTokenResponse;
+        if (
+          existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.SOURCE] ===
+          ACCOUNT_SOURCE.GHL
+        ) {
+          refreshTokenResponse = await refreshAuth(
+            ghl_id,
+            existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE]
+          );
+        } else if (
+          existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.SOURCE] ===
+          ACCOUNT_SOURCE.CALENDLY
+        ) {
+          refreshTokenResponse = await refreshToken(
+            existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.REFRESH_TOKEN]
+          );
+        }
 
-        if (refreshTokenResponse.success && refreshTokenResponse.data?.length) {
+        if (
+          refreshTokenResponse &&
+          refreshTokenResponse.success &&
+          refreshTokenResponse.data?.length
+        ) {
           return refreshTokenResponse.data[0].access_token;
         }
       }

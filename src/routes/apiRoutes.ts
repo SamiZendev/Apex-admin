@@ -2,9 +2,11 @@ import { fetchAllCalendarsByLocationId } from "../controllers/ghlController";
 import {
   bookAppointment,
   configureSubaccount,
+  deleteAccount,
   getCalendarAndSubaccountByBookingAppointmentDetails,
   getDataById,
-  getListOfAllSubaccountByCompanyId,
+  getListOfAllAccounts,
+  getStates,
   getTimezones,
 } from "../controllers/apiController";
 import express from "express";
@@ -20,10 +22,7 @@ import {
 const router = express.Router();
 
 router.get("/getLocation", getDataById);
-router.get(
-  "/getListOfAllSubaccountByCompanyId",
-  getListOfAllSubaccountByCompanyId
-);
+router.get("/getListOfAllAccounts", getListOfAllAccounts);
 router.get("/fetchAllCalendarsByLocationId", fetchAllCalendarsByLocationId);
 router.put("/configureAccount", configureSubaccount);
 router.post("/login", signInUsingPassword);
@@ -35,5 +34,7 @@ router.get("/fetchUTM", getAllUTM);
 router.get("/getUTMById/:id", getUTMById);
 router.put("/utm/:id", updateUTM);
 router.delete("/utm/:id", deleteUTM);
+router.delete("/account/:id", deleteAccount);
+router.get("/states", getStates);
 
 export default router;

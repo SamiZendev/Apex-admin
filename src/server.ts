@@ -5,9 +5,10 @@ import express, {
 } from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
 import authRoutes from "./routes/authRoutes";
 import combinedRoutes from "./routes/combinedRoutes";
+import { updateCalendarConfiguration } from "./cron";
 
 dotenv.config();
 const app = express();
@@ -31,6 +32,8 @@ app.use("/api", combinedRoutes);
 app.get("/", (_req: Request, res: Response) => {
   res.json({ message: "Hello from TypeScript Express Server!" });
 });
+
+updateCalendarConfiguration();
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
