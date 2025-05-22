@@ -16,7 +16,7 @@ import {
 import { getCurrentUser } from "./controller";
 import { formatTimestamp } from "../../utils/helpers";
 
-const clientId = process.env.CAlENDLY_CLIENT_ID;
+const clientId = process.env.CALENDLY_CLIENT_ID;
 const clientSecret = process.env.CALENDLY_CLIENT_SECRET;
 const baseURL = process.env.CALENDLY_AUTH_BASE_URL;
 const redirectURI = process.env.CALENDLY_REDIRECT_URL;
@@ -89,6 +89,11 @@ export const calendlyCallback = async (req: Request, res: Response) => {
         data
       );
 
+      await createWebhookSubscription(
+        accessToken,
+        response?.data?.organization,
+        response?.data?.owner
+      );
       let accountDetails = {};
       if (accessToken) {
         const userDetails = await getCurrentUser(accessToken);
@@ -184,5 +189,38 @@ export const refreshToken = async (refreshToken: string) => {
     };
   } catch (error) {
     console.error("Error during token refresh:", error);
+  }
+};
+
+export const createWebhookSubscription = async (
+  accessToken: string,
+  organization: string,
+  user: string
+) => {
+  try {
+    const response = await axios.post(
+      `${process.env.CALENDLY_API_BASE_URL}/webhook_subscriptions`,
+      {
+        url: `${process.env.APP_URL}/api/webhook`,
+        events: ["invitee.created", "invitee.canceled"],
+        organization: organization,
+        user: user,
+        scope: "user",
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    return {
+      success: true,
+      message: "Webhook subscription created successfully",
+      data: response.data,
+    };
+  } catch (error: any) {
+    console.error("Calendly Webhook Error:", error);
   }
 };

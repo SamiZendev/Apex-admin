@@ -17,7 +17,11 @@ import {
   SUPABASE_TABLE_NAME,
 } from "../utils/constant";
 import { createCustomField, fetchSubaccountInformation } from "./ghlController";
-import { AppointmentWebhookData, GHLSubaccountAuth } from "@/types/interfaces";
+import {
+  AppointmentWebhookData,
+  CalendlyWebhookData,
+  GHLSubaccountAuth,
+} from "../types/interfaces";
 import { isTokenExpired } from "../utils/helpers";
 import { refreshAuth } from "./authController";
 import dayjs from "dayjs";
@@ -335,11 +339,88 @@ const appointmentDelete = async (
   }
 };
 
+const calendlyInviteeCreated = async (
+  data: CalendlyWebhookData
+): Promise<{ success: boolean; message?: string; booked_slot?: any }> => {
+  try {
+    const { data: booked_slot, error } = await supabase
+      .from(SUPABASE_TABLE_NAME.CALENDAR_BOOKED_SLOTS)
+      .insert({
+        [CALENDAR_BOOKED_SLOTS.APPOINTMNET_STATUS]:
+          data?.payload?.scheduled_event?.status,
+        [CALENDAR_BOOKED_SLOTS.GHL_EVENT_ID]: data?.payload?.event
+          ?.split("/")
+          .pop(),
+        [CALENDAR_BOOKED_SLOTS.GHL_CALENDAR_ID]:
+          data?.payload?.scheduled_event?.event_type?.split("/").pop(),
+        [CALENDAR_BOOKED_SLOTS.GHL_LOCATION_ID]: "",
+        [CALENDAR_BOOKED_SLOTS.GHL_ASSIGNED_USER_ID]: "",
+        [CALENDAR_BOOKED_SLOTS.START_TIME]: dayjs(
+          data?.payload?.scheduled_event?.start_time
+        ).unix(),
+        [CALENDAR_BOOKED_SLOTS.END_TIME]: dayjs(
+          data?.payload?.scheduled_event?.end_time
+        ).unix(),
+        [CALENDAR_BOOKED_SLOTS.GHL_CONTACT_ID]: "",
+      })
+      .select();
+
+    if (error) {
+      throw error;
+    }
+    return { success: true, booked_slot: booked_slot };
+  } catch (error) {
+    console.error("Error in saving bookedSlots", error);
+    return {
+      success: false,
+      message: "Internal Server Error",
+      booked_slot: error,
+    };
+  }
+};
+
+const calendlyInviteeCanceled = async (
+  data: CalendlyWebhookData
+): Promise<{ success: boolean; message?: string; booked_slot?: any }> => {
+  try {
+    const nowUTC = new Date().toISOString();
+    const startTime = data?.payload?.scheduled_event?.start_time;
+    const eventId = data?.payload?.scheduled_event?.event_type
+      ?.split("/")
+      .pop();
+
+    if (nowUTC >= startTime) {
+      return {
+        success: false,
+        message: "Cannot delete a past or ongoing appointment.",
+      };
+    }
+
+    const { error } = await supabase
+      .from(SUPABASE_TABLE_NAME.CALENDAR_BOOKED_SLOTS)
+      .delete()
+      .eq(CALENDAR_BOOKED_SLOTS.GHL_EVENT_ID, eventId);
+
+    if (error) {
+      throw error;
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in deleting bookedSlots", error);
+    return {
+      success: false,
+      message: "Internal Server Error",
+      booked_slot: error,
+    };
+  }
+};
+
 export const handleWebhook = async (req: Request, res: Response) => {
   try {
-    const { type } = req.body;
-    console.log(type, "type");
-    switch (type) {
+    const { type, event } = req.body;
+    const eventType = type || event;
+    switch (eventType) {
       case "INSTALL":
         const installResponse = await generateAccessToken(req.body);
         if (!installResponse.success) {
@@ -374,6 +455,24 @@ export const handleWebhook = async (req: Request, res: Response) => {
           return res
             .status(400)
             .json({ message: appointmentDeleteResponse.message });
+        }
+        return res.json({ message: "Data saved successfully" });
+      case "invitee.created":
+        const calendlyInviteeResponse = await calendlyInviteeCreated(req.body);
+        if (!calendlyInviteeResponse.success) {
+          return res
+            .status(400)
+            .json({ message: calendlyInviteeResponse.message });
+        }
+        return res.json({ message: "Data saved successfully" });
+      case "invitee.canceled":
+        const calendlyInviteeCanceledResponse = await calendlyInviteeCanceled(
+          req.body
+        );
+        if (!calendlyInviteeCanceledResponse.success) {
+          return res
+            .status(400)
+            .json({ message: calendlyInviteeCanceledResponse.message });
         }
         return res.json({ message: "Data saved successfully" });
       default:

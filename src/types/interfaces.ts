@@ -97,3 +97,16 @@ export interface AppointmentWebhookData {
   locationId: string;
   appointment: AppointmentData;
 }
+
+export interface CalendlyWebhookData {
+  event: string;
+  payload: {
+    event: string;
+    scheduled_event: {
+      end_time: string;
+      event_type: string;
+      start_time: string;
+      status: string;
+    };
+  };
+}
