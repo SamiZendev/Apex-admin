@@ -152,7 +152,6 @@ export const fetchAndSaveCalendyCalendarInformation = async (
 };
 
 export const fetchAndSaveCalendyUserBookedSlots = async (userId: string) => {
-  console.log("Fetching booked slots for user:", userId);
   try {
     const access_token = await retrieveAccessToken(userId);
     const response = await axios.get(
@@ -219,6 +218,38 @@ export const fetchAndSaveCalendyUserBookedSlots = async (userId: string) => {
     }
 
     return { success: true, events: bookedSlots };
+  } catch (error: any) {
+    console.error("Calendly API error:", error.response?.data || error.message);
+    return {
+      error: "Failed to fetch Calendly event types",
+      details: error?.response?.data || error.message,
+    };
+  }
+};
+
+export const getEventTypeAvailableTimes = async (
+  calendarId: string,
+  userId: string,
+  startTime: string,
+  endTime: string
+) => {
+  try {
+    const access_token = await retrieveAccessToken(userId);
+    const response = await axios.get(
+      `${process.env.CALENDLY_API_BASE_URL}/event_type_available_times`,
+      {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+          "Content-Type": "application/json",
+        },
+        params: {
+          event_type: `${process.env.CALENDLY_API_BASE_URL}/event_types/${calendarId}`,
+          start_time: startTime,
+          end_time: endTime,
+        },
+      }
+    );
+    return { success: true, data: response.data };
   } catch (error: any) {
     console.error("Calendly API error:", error.response?.data || error.message);
     return {

@@ -81,7 +81,6 @@ export const callback = async (req: Request, res: Response) => {
       supabaseResponse;
 
     if (locationId) {
-      console.log("locationId", locationId);
       const existingLocation = await matchByString(
         SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
         GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID,
@@ -99,7 +98,6 @@ export const callback = async (req: Request, res: Response) => {
         );
       }
     } else if (companyId) {
-      console.log("companyId", companyId);
       const { data: existingCompany, error } = await supabase
         .from(SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE)
         .select("*")
@@ -202,7 +200,7 @@ export const refreshAuth = async (
       .select("*")
       .eq(type, id)
       .eq(GHL_SUBACCOUNT_AUTH_ATTRIBUTES.ACCOUNT_TYPE, accountType);
-    console.log("refreshtoken");
+
     if (Array.isArray(existingData) && existingData.length > 0 && !error) {
       const data = qs.stringify({
         client_id: clientId,
@@ -268,7 +266,7 @@ export const refreshAuth = async (
 async function signUpNewUser(company: any) {
   try {
     const password = generateRandomPassword();
-    console.log("password ", password);
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const userData = {
       [USER_DATA.GHL_COMPANY_ID]: company?.id,
@@ -319,7 +317,7 @@ export const signInUsingPassword = async (req: Request, res: Response) => {
     }
 
     const isMatch = await bcrypt.compare(password, data.password);
-    console.log(isMatch);
+
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials" });
     }

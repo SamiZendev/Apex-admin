@@ -31,7 +31,6 @@ const generateAccessToken = async (
 ): Promise<{ success: boolean; message?: string }> => {
   try {
     const { installType, companyId, locationId } = data;
-    console.log("generateAccessToken installType", installType);
 
     if (installType !== "Location") {
       return { success: false, message: "Ignoring non-location webhook." };

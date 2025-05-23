@@ -11,6 +11,28 @@ export interface GHLSubaccountAuth {
   source: string;
   is_active: boolean;
 }
+export interface AccountDetails {
+  id: string;
+  auth_id?: string;
+  redirect_url?: string;
+  spend_amount?: string;
+  calendar_id?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  name?: string;
+  ghl_id?: string;
+  ghl_company_id?: string;
+  ghl_calendar_id?: string;
+  priority_score?: string;
+  ghl_location_timezone?: string;
+  ghl_custom_field_id?: string;
+  assest_minimum?: string;
+  condition?: string;
+  state?: string;
+  calendly_slug?: string;
+  calendly_scheduling_url?: string;
+  ghl_subaccount_auth?: GHLSubaccountAuth;
+}
 export interface CalendlyAccountAuth {
   id?: string;
   access_token: string;
@@ -74,8 +96,10 @@ export interface BookedSlots {
 export interface Calendar {
   id: string;
   name: string;
+  ghl_location_id: string;
   calendar_open_hours: OpenHours[];
   calendar_team_members: TeamMembers[];
+  ghl_account_details: AccountDetails[];
 }
 
 export interface ContactData {

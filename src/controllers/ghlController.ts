@@ -606,7 +606,7 @@ export const fetchCalendarAvailableSlots = async (
 
       return { success: true, data: response.data };
     }
-    return { success: false, message: "Data not saved into database" };
+    return { success: false, message: "Something went wrong" };
   } catch (error: any) {
     console.error(
       "Error fetching company details:",

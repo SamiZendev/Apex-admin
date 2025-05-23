@@ -1,12 +1,9 @@
 import { ACCOUNT_SOURCE, SUPABASE_TABLE_NAME } from "../utils/constant";
 import {
-  CALENDAR_BOOKED_SLOTS,
   CALENDAR_DATA,
-  CALENDAR_OPEN_HOURS,
   GHL_ACCOUNT_DETAILS,
   GHL_SUBACCOUNT_AUTH_ATTRIBUTES,
   STATES,
-  UTM_PARAMETERS,
 } from "./../constants/tableAttributes";
 import { Request, Response } from "express";
 import { matchByString, supabase } from "../services/supabaseClient";
@@ -20,22 +17,29 @@ import {
 } from "./ghlController";
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
-import { BookedSlots, Calendar } from "../types/interfaces";
 import { retrieveAccessToken } from "../utils/helpers";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
-import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
-import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
 import {
   fetchAndSaveCalendyCalendarInformation,
   fetchAndSaveCalendyUserBookedSlots,
+  getEventTypeAvailableTimes,
 } from "./calendly/controller";
+import {
+  filterAvailableGhlCalendars,
+  openGhlCalendar,
+} from "../utils/calendar/ghlCalendar";
+import {
+  checkCalendarByUtmParams,
+  getBookedSlots,
+  sortCalendars,
+} from "../utils/calendar/filter";
+import { AccountDetails } from "../types/interfaces";
+import { filterAvailableCalendlyCalendars } from "../utils/calendar/calendlyCalendar";
 
 dayjs.extend(customParseFormat);
 dayjs.extend(utc);
 dayjs.extend(timezone);
-dayjs.extend(isSameOrAfter);
-dayjs.extend(isSameOrBefore);
 
 export const getDataById = async (req: Request, res: Response) => {
   try {
@@ -235,7 +239,10 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
     const { data: calendars, error } = await supabase
       .from(SUPABASE_TABLE_NAME.CALENDAR_DATA)
       .select(
-        `*,${SUPABASE_TABLE_NAME.CALENDAR_OPEN_HOURS}(*),${SUPABASE_TABLE_NAME.CALENDAR_TEAM_MEMBERS}(*),${SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS}(*)`
+        `*,${SUPABASE_TABLE_NAME.CALENDAR_OPEN_HOURS}(*),${SUPABASE_TABLE_NAME.CALENDAR_TEAM_MEMBERS}(*),${SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS}(
+       *,
+       ${SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE}(*)
+     )`
       )
       .eq(CALENDAR_DATA.SLOT_DURATION, bookingDuration)
       .eq(CALENDAR_DATA.IS_ACTIVE, true);
@@ -246,90 +253,40 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
         .json({ success: false, data: { error, calendars } });
     }
 
-    const availableCalendars = calendars?.filter((calendar) => {
-      const openHours = calendar[SUPABASE_TABLE_NAME.CALENDAR_OPEN_HOURS];
-
-      const todaysOpenings = openHours.filter((entry: any) => {
-        return entry[CALENDAR_OPEN_HOURS.DAY_OF_THE_WEEK] === selectedDay;
-      });
-
-      return todaysOpenings.some((entry: any) => {
-        const dateStr = userStartUTC.format("YYYY-MM-DD");
-
-        const openTimeUTC = dayjs
-          .utc(`${dateStr}T00:00:00Z`)
-          .set("hour", entry[CALENDAR_OPEN_HOURS.OPEN_HOUR])
-          .set("minute", entry[CALENDAR_OPEN_HOURS.OPEN_MINUTE]);
-
-        let closeTimeUTC = dayjs
-          .utc(`${dateStr}T00:00:00Z`)
-          .set("hour", entry[CALENDAR_OPEN_HOURS.CLOSE_HOUR])
-          .set("minute", entry[CALENDAR_OPEN_HOURS.CLOSE_MINUTE]);
-
-        if (
-          entry[CALENDAR_OPEN_HOURS.CLOSE_HOUR] === 0 &&
-          entry[CALENDAR_OPEN_HOURS.CLOSE_MINUTE] === 0
-        ) {
-          closeTimeUTC = closeTimeUTC.add(1, "day");
-        }
-
-        return (
-          userStartUTC.isSameOrAfter(openTimeUTC) &&
-          userEndUTC.isSameOrBefore(closeTimeUTC)
-        );
-      });
-    });
-
-    const filterByUtmParams = await Promise.all(
-      availableCalendars.map(async (calendar) => {
-        const accountDetails =
-          calendar[SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS];
-        let dynamicKey = "";
-        if (!accountDetails) return false;
-
-        const calendarStateIds =
-          accountDetails[0][GHL_ACCOUNT_DETAILS.STATE] || [];
-        const assetMinimumRaw =
-          accountDetails[0][GHL_ACCOUNT_DETAILS.ASSEST_MINIMUM];
-        if (!assetMinimumRaw) return false;
-        const [utmKeyId, value] = assetMinimumRaw.split(":");
-
-        const { data, error } = await supabase
-          .from(SUPABASE_TABLE_NAME.UTM_PARAMETERS)
-          .select(UTM_PARAMETERS.UTM_PARAMETER)
-          .eq(UTM_PARAMETERS.ID, utmKeyId)
-          .single();
-
-        if (data) {
-          dynamicKey = data[UTM_PARAMETERS.UTM_PARAMETER];
-        }
-        const utmValue = utmParams[dynamicKey];
-
-        const condition = (
-          accountDetails[0][GHL_ACCOUNT_DETAILS.CONDITION] || "AND"
-        ).toUpperCase();
-
-        const stateMatch = shouldCheckState
-          ? calendarStateIds.some((id: string) => matchedStateIds.includes(id))
-          : true;
-
-        const assetMatch = utmValue ? value >= parseFloat(utmValue) : true;
-
-        if (shouldCheckState && utmValue) {
-          return condition === "AND"
-            ? stateMatch && assetMatch
-            : stateMatch || assetMatch;
-        } else if (shouldCheckState) {
-          return stateMatch;
-        } else {
-          return assetMatch;
-        }
-      })
+    const calendlyCalendars = calendars.filter((calendar) =>
+      calendar.ghl_account_details?.some(
+        (account: AccountDetails) =>
+          account.ghl_subaccount_auth?.source === ACCOUNT_SOURCE.CALENDLY
+      )
     );
 
-    let availableCalendarIds = filterByUtmParams?.map(
+    const ghlCalendars = calendars.filter((calendar) =>
+      calendar.ghl_account_details?.some(
+        (account: AccountDetails) =>
+          account.ghl_subaccount_auth?.source === ACCOUNT_SOURCE.GHL
+      )
+    );
+
+    const availableGhlCalendars = openGhlCalendar(
+      ghlCalendars,
+      userStartUTC,
+      userEndUTC,
+      selectedDay
+    );
+
+    const combinedCalendars = [...calendlyCalendars, ...availableGhlCalendars];
+
+    const eligibleCalendars = await checkCalendarByUtmParams(
+      combinedCalendars,
+      utmParams,
+      matchedStateIds,
+      shouldCheckState
+    );
+
+    let availableCalendarIds = eligibleCalendars?.map(
       (calendar) => calendar.calendar_id
     );
+
     const bookedSlots = await getBookedSlots(availableCalendarIds);
 
     if (!bookedSlots.success || !bookedSlots.data) {
@@ -338,39 +295,83 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
         .json({ message: "Unable to fetch booked slots", bookedSlots });
     }
 
-    const filteredCalendars = filterAvailableCalendars(
-      availableCalendars,
+    const filteredGHLCalendars = filterAvailableGhlCalendars(
+      eligibleCalendars,
       bookedSlots.data,
       startTime,
       endTime
     );
+
+    const filteredCalendlyCalendars = filterAvailableCalendlyCalendars(
+      eligibleCalendars,
+      bookedSlots.data,
+      startTime,
+      endTime
+    );
+
+    const filteredCalendars = [
+      ...filteredCalendlyCalendars,
+      ...filteredGHLCalendars,
+    ];
     const sortedCalendars = sortCalendars(filteredCalendars);
 
     const calendarsWithSlot = await Promise.all(
       sortedCalendars.map(async (calendar) => {
-        const slotAvailability = await fetchCalendarAvailableSlots(
-          calendar[CALENDAR_DATA.CALENDAR_ID],
-          calendar[CALENDAR_DATA.GHL_LOCATION_ID],
-          startDateMillis,
-          endDateMillis,
-          "GMT"
-        );
-        if (slotAvailability?.success && slotAvailability?.data) {
-          const slots = slotAvailability.data?.[bookingDate]?.slots || [];
-          if (slots.includes(userStartUTC.toISOString().replace(".000", ""))) {
-            return calendar;
+        const source =
+          calendar[SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS][0][
+            SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE
+          ][GHL_SUBACCOUNT_AUTH_ATTRIBUTES.SOURCE];
+        if (source === ACCOUNT_SOURCE.GHL) {
+          const slotAvailability = await fetchCalendarAvailableSlots(
+            calendar[CALENDAR_DATA.CALENDAR_ID],
+            calendar[CALENDAR_DATA.GHL_LOCATION_ID],
+            startDateMillis,
+            endDateMillis,
+            "GMT"
+          );
+
+          if (slotAvailability?.success && slotAvailability?.data) {
+            const slots = slotAvailability.data?.[bookingDate]?.slots || [];
+            if (
+              slots.includes(userStartUTC.toISOString().replace(".000", ""))
+            ) {
+              return calendar;
+            }
+          }
+        } else if (source === ACCOUNT_SOURCE.CALENDLY) {
+          const slotAvailability = await getEventTypeAvailableTimes(
+            calendar[CALENDAR_DATA.CALENDAR_ID],
+            calendar[CALENDAR_DATA.GHL_LOCATION_ID],
+            userStartUTC.toISOString(),
+            userEndUTC.toISOString()
+          );
+          if (slotAvailability?.success && slotAvailability?.data) {
+            const slots = slotAvailability.data?.collection;
+            const requestedTime = userStartUTC
+              .toISOString()
+              .replace(".000", "");
+            const matchingSlot = slots?.find(
+              (slot: { start_time: string }) =>
+                slot.start_time === requestedTime
+            );
+
+            if (matchingSlot) {
+              return {
+                ...calendar,
+                matched_slot: matchingSlot,
+              };
+            }
           }
         }
         return null;
       })
     );
-
-    const calendarSlots = calendarsWithSlot.filter(Boolean);
+    const calendarSlots = sortCalendars(calendarsWithSlot.filter(Boolean));
 
     return res.status(200).json({
       success: true,
       message: "Calendars fetched successfully",
-      calendars: calendarSlots,
+      calendar: calendarSlots[0],
     });
   } catch (error) {
     console.error("Error fetching data:", error);
@@ -486,107 +487,6 @@ export const getTimezones = async (req: Request, res: Response) => {
       error,
     });
   }
-};
-
-const getBookedSlots = async (
-  ghlCalendarIds: string[]
-): Promise<{ success: boolean; data?: BookedSlots[]; error?: any }> => {
-  try {
-    const { data, error } = await supabase
-      .from(SUPABASE_TABLE_NAME.CALENDAR_BOOKED_SLOTS)
-      .select()
-      .in(CALENDAR_BOOKED_SLOTS.GHL_CALENDAR_ID, ghlCalendarIds);
-    if (error) {
-      throw error;
-    }
-
-    return { success: true, data: data || [] };
-  } catch (error) {
-    console.log("Error occured while fetching booked slots");
-    return {
-      success: false,
-      error,
-    };
-  }
-};
-
-const isOverlapping = (
-  requestedStartTime: number,
-  requestedEndTime: number,
-  bookedStartTime: number,
-  bookedEndTime: number
-) => requestedStartTime < bookedEndTime && bookedStartTime < requestedEndTime;
-
-const filterAvailableCalendars = (
-  calendars: Calendar[],
-  bookedSlots: BookedSlots[],
-  requestedStart: number,
-  requestedEnd: number
-): Calendar[] => {
-  return calendars
-    .map((calendar) => {
-      const teamMembers = calendar.calendar_team_members || [];
-
-      if (teamMembers.length === 0) {
-        return calendar;
-      }
-
-      const availableMembers = teamMembers.filter((member) => {
-        const memberBookings = bookedSlots?.filter(
-          (slot) => slot?.ghl_assigned_user_id === member.user_id
-        );
-
-        const isBusy = memberBookings?.some((slot) => {
-          isOverlapping(
-            requestedStart,
-            requestedEnd,
-            slot?.start_time,
-            slot?.end_time
-          );
-        });
-
-        return !isBusy;
-      });
-
-      if (availableMembers?.length > 0) {
-        return {
-          ...calendar,
-          calendar_team_members: availableMembers,
-        };
-      }
-
-      return null;
-    })
-    .filter((calendar): calendar is Calendar => calendar !== null);
-};
-
-const sortCalendars = (calendars: any[]) => {
-  return calendars.sort((a, b) => {
-    const bookedSlotsA = a.booked_slots ? a.booked_slots : 0;
-    const bookedSlotsB = b.booked_slots ? b.booked_slots : 0;
-
-    if (bookedSlotsA !== bookedSlotsB) {
-      return bookedSlotsA - bookedSlotsB;
-    }
-
-    // const priorityA = parseInt(
-    //   a.ghl_account_details?.[0]?.priority_score || "0",
-    //   10
-    // );
-    // const priorityB = parseInt(
-    //   b.ghl_account_details?.[0]?.priority_score || "0",
-    //   10
-    // );
-
-    // if (priorityA !== priorityB) {
-    //   return priorityB - priorityA;
-    // }
-
-    const spendA = parseFloat(a.ghl_account_details?.[0]?.spend_amount || "0");
-    const spendB = parseFloat(b.ghl_account_details?.[0]?.spend_amount || "0");
-
-    return spendB - spendA;
-  });
 };
 
 export const getStates = async (req: Request, res: Response) => {

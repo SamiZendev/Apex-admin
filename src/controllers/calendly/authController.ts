@@ -63,7 +63,6 @@ export const calendlyCallback = async (req: Request, res: Response) => {
       supabaseResponse;
 
     if (ownerId) {
-      console.log("owner", ownerId);
       const existingOwner = await matchByString(
         SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
         GHL_SUBACCOUNT_AUTH_ATTRIBUTES.CALENDLY_OWNER,
@@ -157,7 +156,6 @@ export const refreshToken = async (refreshToken: string) => {
     const accessToken = response?.data?.access_token;
 
     if (ownerId) {
-      console.log("owner", ownerId);
       const { data: supabaseResponse, error } = await supabase
         .from(SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE)
         .update({
