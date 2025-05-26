@@ -9,6 +9,7 @@ export const GHL_SUBACCOUNT_AUTH_ATTRIBUTES = {
   UPDATED_AT: "updated_at",
   CALENDLY_OWNER: "calendly_owner",
   CALENDLY_ORGANIZATION: "calendly_organization",
+  ONCEHUB_ID: "oncehub_id",
   SOURCE: "source",
 } as const;
 

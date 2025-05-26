@@ -19,4 +19,5 @@ export const GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE = {
 export const ACCOUNT_SOURCE = {
   GHL: "ghl",
   CALENDLY: "calendly",
+  ONCEHUB: "oncehub",
 } as const;
