@@ -36,6 +36,10 @@ import {
 } from "../utils/calendar/filter";
 import { AccountDetails } from "../types/interfaces";
 import { filterAvailableCalendlyCalendars } from "../utils/calendar/calendlyCalendar";
+import {
+  fetchAndSaveOncehubCalendarBookedSlot,
+  fetchAndSaveOncehubCalendarInformation,
+} from "./onceHub/controller";
 
 dayjs.extend(customParseFormat);
 dayjs.extend(utc);
@@ -120,6 +124,15 @@ export const configureSubaccount = async (req: Request, res: Response) => {
       );
 
       calendarEvents = await fetchAndSaveCalendyUserBookedSlots(ghl_id);
+    } else if (source === ACCOUNT_SOURCE.ONCEHUB) {
+      calendar = await fetchAndSaveOncehubCalendarInformation(
+        validatedData?.[GHL_ACCOUNT_DETAILS.GHL_CALENDAR_ID],
+        ghl_id
+      );
+      calendarEvents = await fetchAndSaveOncehubCalendarBookedSlot(
+        validatedData?.[GHL_ACCOUNT_DETAILS.GHL_CALENDAR_ID],
+        ghl_id
+      );
     }
 
     if (

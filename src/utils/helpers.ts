@@ -89,6 +89,11 @@ export const retrieveAccessToken = async (ghl_id: string) => {
           refreshTokenResponse = await refreshToken(
             existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.REFRESH_TOKEN]
           );
+        } else if (
+          existingLocation[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.SOURCE] ===
+          ACCOUNT_SOURCE.ONCEHUB
+        ) {
+          return existingLocation[0].access_token;
         }
 
         if (
