@@ -9,15 +9,12 @@ import { Request, Response } from "express";
 import { matchByString, supabase } from "../services/supabaseClient";
 import z from "zod";
 import {
-  createGhlAppointment,
-  createGhlContact,
   fetchAndSaveCalendarBookedSlot,
   fetchAndSaveCalendarInformation,
   fetchCalendarAvailableSlots,
 } from "./ghlController";
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
-import { retrieveAccessToken } from "../utils/helpers";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import {
@@ -27,6 +24,7 @@ import {
 } from "./calendly/controller";
 import {
   filterAvailableGhlCalendars,
+  GhlAppointmentBooking,
   openGhlCalendar,
 } from "../utils/calendar/ghlCalendar";
 import {
@@ -39,7 +37,12 @@ import { filterAvailableCalendlyCalendars } from "../utils/calendar/calendlyCale
 import {
   fetchAndSaveOncehubCalendarBookedSlot,
   fetchAndSaveOncehubCalendarInformation,
+  getAvailableTimeSlotsForBookingCalendar,
 } from "./onceHub/controller";
+import {
+  filterAvailableOncehubCalendars,
+  OnceHubAppointmentBooking,
+} from "../utils/calendar/onceHubCalendar";
 
 dayjs.extend(customParseFormat);
 dayjs.extend(utc);
@@ -273,6 +276,13 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
       )
     );
 
+    const oncehubCalendars = calendars.filter((calendar) =>
+      calendar.ghl_account_details?.some(
+        (account: AccountDetails) =>
+          account.ghl_subaccount_auth?.source === ACCOUNT_SOURCE.ONCEHUB
+      )
+    );
+
     const ghlCalendars = calendars.filter((calendar) =>
       calendar.ghl_account_details?.some(
         (account: AccountDetails) =>
@@ -287,7 +297,11 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
       selectedDay
     );
 
-    const combinedCalendars = [...calendlyCalendars, ...availableGhlCalendars];
+    const combinedCalendars = [
+      ...calendlyCalendars,
+      ...availableGhlCalendars,
+      ...oncehubCalendars,
+    ];
 
     const eligibleCalendars = await checkCalendarByUtmParams(
       combinedCalendars,
@@ -322,9 +336,17 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
       endTime
     );
 
+    const filteredOncehubCalendars = filterAvailableOncehubCalendars(
+      eligibleCalendars,
+      bookedSlots.data,
+      startTime,
+      endTime
+    );
+
     const filteredCalendars = [
       ...filteredCalendlyCalendars,
       ...filteredGHLCalendars,
+      ...filteredOncehubCalendars,
     ];
     const sortedCalendars = sortCalendars(filteredCalendars);
 
@@ -375,6 +397,30 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
               };
             }
           }
+        } else if (source === ACCOUNT_SOURCE.ONCEHUB) {
+          const slotAvailability =
+            await getAvailableTimeSlotsForBookingCalendar(
+              calendar[CALENDAR_DATA.CALENDAR_ID],
+              calendar[CALENDAR_DATA.GHL_LOCATION_ID],
+              userStartUTC.toISOString(),
+              userEndUTC.toISOString()
+            );
+          if (slotAvailability?.success && slotAvailability?.data) {
+            const slots = slotAvailability.data;
+            const requestedTime = userStartUTC.toISOString();
+
+            const matchingSlot = slots?.find(
+              (slot: { start_time: string }) =>
+                slot.start_time === requestedTime
+            );
+
+            if (matchingSlot) {
+              return {
+                ...calendar,
+                matched_slot: matchingSlot,
+              };
+            }
+          }
         }
         return null;
       })
@@ -401,11 +447,10 @@ export const bookAppointment = async (req: Request, res: Response) => {
       firstName,
       lastName,
       email,
-      phone,
       startTime,
       endTime,
       locationId,
-      utmParams,
+      timeZone,
     } = req.body;
     if (!startTime || !endTime || !firstName || !email || !locationId) {
       return res.status(400).json({
@@ -413,72 +458,43 @@ export const bookAppointment = async (req: Request, res: Response) => {
           "Missing one of the required fields: startTime, endTime, firstName and email.",
       });
     }
-    const access_token = await retrieveAccessToken(locationId);
-    const { data: subaccountData, error } = await supabase
-      .from(SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS)
-      .select(`*,${SUPABASE_TABLE_NAME.CALENDAR_DATA}(*)`)
-      .eq(GHL_ACCOUNT_DETAILS.GHL_ID, locationId);
 
-    if (error || !subaccountData) {
+    const { data: accountData, error } = await supabase
+      .from(SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE)
+      .select("*")
+      .eq(GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID, locationId);
+
+    if (error || !accountData) {
       return res.status(404).json({
         success: false,
         message: "Subaccount not found",
       });
     }
 
-    const contact = await createGhlContact(
-      {
+    let response;
+    if (
+      accountData[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.SOURCE] ===
+      ACCOUNT_SOURCE.GHL
+    ) {
+      response = await GhlAppointmentBooking(req.body);
+    } else if (
+      accountData[0]?.[GHL_SUBACCOUNT_AUTH_ATTRIBUTES.SOURCE] ===
+      ACCOUNT_SOURCE.ONCEHUB
+    ) {
+      response = await OnceHubAppointmentBooking({
         firstName: firstName,
-        lastName: lastName || "",
+        lastName: lastName,
         email: email,
-        phone: phone,
+        startTime: dayjs(startTime).utc().toISOString(),
         locationId: locationId,
-        source: process.env.GHL_APP_NAME as string,
-        customFields: [
-          {
-            id: subaccountData[0]?.[GHL_ACCOUNT_DETAILS.GHL_CUSTOM_FIELD_ID],
-            value: JSON.stringify(utmParams),
-          },
-        ],
-      },
-      access_token
-    );
-
-    if (!contact) {
-      return res.status(400).json({
-        success: false,
-        message: "Contact was not created",
-        contact,
+        timezone: timeZone,
       });
     }
 
-    const appointment = await createGhlAppointment(
-      {
-        calendarId: subaccountData[0]?.[GHL_ACCOUNT_DETAILS.GHL_CALENDAR_ID],
-        locationId: locationId,
-        contactId: contact?.id,
-        startTime: dayjs(startTime)
-          .tz(subaccountData[0]?.[GHL_ACCOUNT_DETAILS.GHL_LOCATION_TIMEZONE])
-          .format(),
-        endTime: dayjs(endTime)
-          .tz(subaccountData[0]?.[GHL_ACCOUNT_DETAILS.GHL_LOCATION_TIMEZONE])
-          .format(),
-      },
-      access_token
-    );
-
-    if (appointment.success) {
-      return res.status(200).json({
-        success: true,
-        redirectURL: subaccountData[0]?.[GHL_ACCOUNT_DETAILS.REDIRECT_URL],
-      });
+    if (response?.success) {
+      return res.status(200).json(response);
     }
-
-    return res.status(400).json({
-      success: false,
-      calendarId: subaccountData[0]?.[GHL_ACCOUNT_DETAILS.GHL_CALENDAR_ID],
-      locationId: locationId,
-    });
+    return res.status(500).json(response);
   } catch (error) {}
 };
 

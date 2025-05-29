@@ -1,4 +1,7 @@
-import { CALENDAR_OPEN_HOURS } from "../../constants/tableAttributes";
+import {
+  CALENDAR_OPEN_HOURS,
+  GHL_ACCOUNT_DETAILS,
+} from "../../constants/tableAttributes";
 import { ACCOUNT_SOURCE, SUPABASE_TABLE_NAME } from "../constant";
 import dayjs from "dayjs";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
@@ -8,6 +11,12 @@ import timezone from "dayjs/plugin/timezone";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 import { AccountDetails, BookedSlots, Calendar } from "../../types/interfaces";
 import { isOverlapping } from "./filter";
+import { retrieveAccessToken } from "../helpers";
+import { supabase } from "../../services/supabaseClient";
+import {
+  createGhlAppointment,
+  createGhlContact,
+} from "../../controllers/ghlController";
 
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
@@ -104,3 +113,95 @@ export function filterAvailableGhlCalendars(
     })
     .filter((calendar): calendar is Calendar => calendar !== null);
 }
+
+export const GhlAppointmentBooking = async (data: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  startTime: string;
+  endTime: string;
+  locationId: string;
+  utmParams: any;
+}) => {
+  try {
+    const {
+      firstName,
+      lastName,
+      email,
+      phone,
+      startTime,
+      endTime,
+      locationId,
+      utmParams,
+    } = data;
+    const access_token = await retrieveAccessToken(locationId);
+    const { data: subaccountData, error } = await supabase
+      .from(SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS)
+      .select(
+        `*,${SUPABASE_TABLE_NAME.CALENDAR_DATA}(*),${SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE}(*)`
+      )
+      .eq(GHL_ACCOUNT_DETAILS.GHL_ID, locationId);
+
+    if (error || !subaccountData) {
+      return {
+        success: false,
+        message: "Subaccount not found",
+      };
+    }
+
+    const contact = await createGhlContact(
+      {
+        firstName: firstName,
+        lastName: lastName || "",
+        email: email,
+        phone: phone,
+        locationId: locationId,
+        source: process.env.GHL_APP_NAME as string,
+        customFields: [
+          {
+            id: subaccountData[0]?.[GHL_ACCOUNT_DETAILS.GHL_CUSTOM_FIELD_ID],
+            value: JSON.stringify(utmParams),
+          },
+        ],
+      },
+      access_token
+    );
+
+    if (!contact) {
+      return {
+        success: false,
+        message: "Contact was not created",
+        contact,
+      };
+    }
+
+    const appointment = await createGhlAppointment(
+      {
+        calendarId: subaccountData[0]?.[GHL_ACCOUNT_DETAILS.GHL_CALENDAR_ID],
+        locationId: locationId,
+        contactId: contact?.id,
+        startTime: dayjs(startTime)
+          .tz(subaccountData[0]?.[GHL_ACCOUNT_DETAILS.GHL_LOCATION_TIMEZONE])
+          .format(),
+        endTime: dayjs(endTime)
+          .tz(subaccountData[0]?.[GHL_ACCOUNT_DETAILS.GHL_LOCATION_TIMEZONE])
+          .format(),
+      },
+      access_token
+    );
+
+    if (appointment.success) {
+      return {
+        success: true,
+        redirectURL: subaccountData[0]?.[GHL_ACCOUNT_DETAILS.REDIRECT_URL],
+      };
+    }
+
+    return {
+      success: false,
+      calendarId: subaccountData[0]?.[GHL_ACCOUNT_DETAILS.GHL_CALENDAR_ID],
+      locationId: locationId,
+    };
+  } catch (error) {}
+};

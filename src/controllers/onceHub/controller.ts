@@ -337,3 +337,72 @@ export const fetchAndSaveOncehubCalendarBookedSlot = async (
     };
   }
 };
+
+export const getAvailableTimeSlotsForBookingCalendar = async (
+  calendarId: string,
+  userId: string,
+  startTime: string,
+  endTime: string
+) => {
+  try {
+    const apiKey = await retrieveAccessToken(userId);
+    const response = await axios.get(
+      `${process.env.ONCEHUB_API_BASE_URL}/booking-calendars/${calendarId}/time-slots`,
+      {
+        headers: {
+          Accept: "application/json",
+          "API-Key": `${apiKey}`,
+        },
+        params: {
+          start_time: startTime,
+          end_time: endTime,
+        },
+      }
+    );
+    return { success: true, data: response.data };
+  } catch (error: any) {
+    console.error("Oncehub API error:", error.response?.data || error.message);
+    return {
+      error: "Failed to fetch Oncehub calendar time slots",
+      details: error?.response?.data || error.message,
+    };
+  }
+};
+
+export const bookOnceHubSlot = async (
+  calendarId: string,
+  apiKey: string,
+  guest_time_zone: string,
+  start_time: string,
+  booking_form: {
+    name: string;
+    email: string;
+  }
+) => {
+  try {
+    const response = await axios.post(
+      `${process.env.ONCEHUB_API_BASE_URL}//booking-calendars/${calendarId}/schedule`,
+      {
+        booking_form,
+        start_time,
+        guest_time_zone,
+      },
+      {
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "API-Key": `${apiKey}`,
+        },
+      }
+    );
+
+    return { success: true, data: response?.data };
+  } catch (error) {
+    console.error("Error creating appointment", error);
+    return {
+      success: false,
+      error: "Failed to create appointment",
+      details: error,
+    };
+  }
+};
