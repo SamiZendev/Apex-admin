@@ -21,6 +21,7 @@ import {
   AppointmentWebhookData,
   CalendlyWebhookData,
   GHLSubaccountAuth,
+  OncehubWebhookData,
 } from "../types/interfaces";
 import { isTokenExpired } from "../utils/helpers";
 import { refreshAuth } from "./authController";
@@ -415,6 +416,108 @@ const calendlyInviteeCanceled = async (
   }
 };
 
+const oncehubBookingScheduled = async (
+  data: OncehubWebhookData
+): Promise<{ success: boolean; message?: string; booked_slot?: any }> => {
+  try {
+    const { data: booked_slot, error } = await supabase
+      .from(SUPABASE_TABLE_NAME.CALENDAR_BOOKED_SLOTS)
+      .insert({
+        [CALENDAR_BOOKED_SLOTS.APPOINTMNET_STATUS]: data?.data?.status,
+        [CALENDAR_BOOKED_SLOTS.GHL_EVENT_ID]: data?.data?.id,
+        [CALENDAR_BOOKED_SLOTS.GHL_CALENDAR_ID]: data?.data?.booking_calendar,
+        [CALENDAR_BOOKED_SLOTS.GHL_LOCATION_ID]: data?.data?.owner,
+        [CALENDAR_BOOKED_SLOTS.GHL_ASSIGNED_USER_ID]: data?.data?.owner,
+        [CALENDAR_BOOKED_SLOTS.START_TIME]: dayjs(
+          data?.data?.starting_time
+        ).unix(),
+        [CALENDAR_BOOKED_SLOTS.END_TIME]: dayjs
+          .utc(data?.data?.starting_time)
+          .add(data?.data?.duration_minutes, "minute")
+          .unix(),
+        [CALENDAR_BOOKED_SLOTS.GHL_CONTACT_ID]: data?.data?.contact,
+      })
+      .select();
+
+    if (error) {
+      throw error;
+    }
+    return { success: true, booked_slot: booked_slot };
+  } catch (error) {
+    console.error("Error in saving bookedSlots", error);
+    return {
+      success: false,
+      message: "Internal Server Error",
+      booked_slot: error,
+    };
+  }
+};
+
+const oncehubBookingRescheduled = async (
+  data: OncehubWebhookData
+): Promise<{ success: boolean; message?: string; booked_slot?: any }> => {
+  try {
+    const eventId = data?.data?.id;
+    const { data: booked_slot, error } = await supabase
+      .from(SUPABASE_TABLE_NAME.CALENDAR_BOOKED_SLOTS)
+      .update({
+        [CALENDAR_BOOKED_SLOTS.APPOINTMNET_STATUS]: data?.data?.status,
+        [CALENDAR_BOOKED_SLOTS.GHL_EVENT_ID]: data?.data?.id,
+        [CALENDAR_BOOKED_SLOTS.GHL_CALENDAR_ID]: data?.data?.booking_calendar,
+        [CALENDAR_BOOKED_SLOTS.GHL_LOCATION_ID]: data?.data?.owner,
+        [CALENDAR_BOOKED_SLOTS.GHL_ASSIGNED_USER_ID]: data?.data?.owner,
+        [CALENDAR_BOOKED_SLOTS.START_TIME]: dayjs(
+          data?.data?.starting_time
+        ).unix(),
+        [CALENDAR_BOOKED_SLOTS.END_TIME]: dayjs
+          .utc(data?.data?.starting_time)
+          .add(data?.data?.duration_minutes, "minute")
+          .unix(),
+        [CALENDAR_BOOKED_SLOTS.GHL_CONTACT_ID]: data?.data?.contact,
+      })
+      .eq(CALENDAR_BOOKED_SLOTS.GHL_EVENT_ID, eventId)
+      .select();
+
+    if (error) {
+      throw error;
+    }
+    return { success: true, booked_slot: booked_slot };
+  } catch (error) {
+    console.error("Error in saving bookedSlots", error);
+    return {
+      success: false,
+      message: "Internal Server Error",
+      booked_slot: error,
+    };
+  }
+};
+
+const oncehubBookingCanceled = async (
+  data: OncehubWebhookData
+): Promise<{ success: boolean; message?: string; booked_slot?: any }> => {
+  try {
+    const eventId = data?.data?.id;
+    const { error } = await supabase
+      .from(SUPABASE_TABLE_NAME.CALENDAR_BOOKED_SLOTS)
+      .delete()
+      .eq(CALENDAR_BOOKED_SLOTS.GHL_EVENT_ID, eventId);
+
+    if (error) {
+      console.log("error", error);
+      throw error;
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in deleting bookedSlots", error);
+    return {
+      success: false,
+      message: "Internal Server Error",
+      booked_slot: error,
+    };
+  }
+};
+
 export const handleWebhook = async (req: Request, res: Response) => {
   try {
     const { type, event } = req.body;
@@ -472,6 +575,44 @@ export const handleWebhook = async (req: Request, res: Response) => {
           return res
             .status(400)
             .json({ message: calendlyInviteeCanceledResponse.message });
+        }
+        return res.json({ message: "Data saved successfully" });
+      case "booking.scheduled":
+        const oncehubBookingScheduledResponse = await oncehubBookingScheduled(
+          req.body
+        );
+        if (!oncehubBookingScheduledResponse.success) {
+          return res
+            .status(400)
+            .json({ message: oncehubBookingScheduledResponse.message });
+        }
+        return res.json({ message: "Data saved successfully" });
+      case "booking.rescheduled":
+        const oncehubBookingRescheduledResponse =
+          await oncehubBookingRescheduled(req.body);
+        if (!oncehubBookingRescheduledResponse.success) {
+          return res
+            .status(400)
+            .json({ message: oncehubBookingRescheduledResponse.message });
+        }
+        return res.json({ message: "Data saved successfully" });
+      case "booking.canceled":
+        const oncehubBookingCanceledResponse = await oncehubBookingCanceled(
+          req.body
+        );
+        if (!oncehubBookingCanceledResponse.success) {
+          return res
+            .status(400)
+            .json({ message: oncehubBookingCanceledResponse.message });
+        }
+        return res.json({ message: "Data saved successfully" });
+      case "booking.canceled_reschedule_requested":
+        const oncehubBookingCanceledRescheduleRequestedResponse =
+          await oncehubBookingCanceled(req.body);
+        if (!oncehubBookingCanceledRescheduleRequestedResponse.success) {
+          return res.status(400).json({
+            message: oncehubBookingCanceledRescheduleRequestedResponse.message,
+          });
         }
         return res.json({ message: "Data saved successfully" });
       default:

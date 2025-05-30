@@ -134,3 +134,17 @@ export interface CalendlyWebhookData {
     };
   };
 }
+
+export interface OncehubWebhookData {
+  id: string;
+  type: string;
+  data: {
+    id: string;
+    status: string;
+    starting_time: string;
+    owner: string;
+    duration_minutes: number;
+    contact: string;
+    booking_calendar: string;
+  };
+}
