@@ -8,6 +8,7 @@ import { Request, Response } from "express";
 import axios from "axios";
 import {
   CALENDAR_BOOKED_SLOTS,
+  CALENDAR_DATA,
   GHL_ACCOUNT_DETAILS,
   GHL_SUBACCOUNT_AUTH_ATTRIBUTES,
 } from "../constants/tableAttributes";
@@ -171,20 +172,34 @@ const changeAccountStatus = async (
     };
 
     if (locationId) {
-      const existingLocation = await matchByString(
-        SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
-        GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID,
-        locationId
-      );
+      const [{ error: error1 }, { error: error2 }, { error: error3 }] =
+        await Promise.all([
+          supabase
+            .from(SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS)
+            .delete()
+            .eq(GHL_ACCOUNT_DETAILS.GHL_ID, locationId),
 
-      if (existingLocation && Object.keys(existingLocation).length > 0) {
-        supabaseResponse = await updateData(
-          SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
-          update,
-          GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID,
-          locationId
-        );
+          supabase
+            .from(SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE)
+            .delete()
+            .eq(GHL_SUBACCOUNT_AUTH_ATTRIBUTES.GHL_LOCATION_ID, locationId),
+
+          supabase
+            .from(SUPABASE_TABLE_NAME.CALENDAR_DATA)
+            .delete()
+            .eq(CALENDAR_DATA.GHL_LOCATION_ID, locationId),
+        ]);
+
+      const errors = [error1, error2, error3].filter(Boolean);
+
+      if (errors.length > 0) {
+        return { success: false };
       }
+
+      return {
+        success: true,
+        message: "Account and related data deleted successfully.",
+      };
     } else {
       const existingCompany = await matchByString(
         SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE,
@@ -522,6 +537,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
   try {
     const { type, event } = req.body;
     const eventType = type || event;
+    console.log("Received webhook event:", eventType);
     switch (eventType) {
       case "INSTALL":
         const installResponse = await generateAccessToken(req.body);

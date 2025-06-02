@@ -28,23 +28,35 @@ export async function checkCalendarByUtmParams(
 
       let assetMatch = true;
 
-      if (assetMinimumRaw) {
+      if (assetMinimumRaw && assetMinimumRaw.includes(":")) {
         const [utmKeyId, minValueStr] = assetMinimumRaw.split(":");
         const minValue = parseFloat(minValueStr);
 
         if (utmKeyId && !isNaN(minValue)) {
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from(SUPABASE_TABLE_NAME.UTM_PARAMETERS)
             .select(UTM_PARAMETERS.UTM_PARAMETER)
             .eq(UTM_PARAMETERS.ID, utmKeyId)
             .single();
 
-          const dynamicKey = data?.[UTM_PARAMETERS.UTM_PARAMETER];
-          const utmValue = parseFloat(utmParams[dynamicKey]);
+          if (error || !data) {
+            console.warn("UTM parameter not found for ID:", utmKeyId);
+            assetMatch = false;
+          } else {
+            const dynamicKey = data[UTM_PARAMETERS.UTM_PARAMETER];
+            const utmValue = parseFloat(utmParams[dynamicKey]);
 
-          if (!isNaN(utmValue)) {
-            assetMatch = utmValue >= minValue;
+            if (!isNaN(utmValue)) {
+              assetMatch = utmValue >= minValue;
+              console.log(
+                `UTM Value: ${utmValue}, Min Required: ${minValue}, Match: ${assetMatch}`
+              );
+            } else {
+              assetMatch = false;
+            }
           }
+        } else {
+          assetMatch = false;
         }
       }
 
@@ -56,12 +68,14 @@ export async function checkCalendarByUtmParams(
         condition === "AND"
           ? stateMatch && assetMatch
           : stateMatch || assetMatch;
-
+      console.log(
+        `Calendar ID: ${calendar.id}, State Match: ${stateMatch}, Asset Match: ${assetMatch}, Condition: ${condition}, Should Include: ${shouldInclude}`
+      );
       return shouldInclude ? calendar : null;
     })
   );
 
-  return results.filter((calendar) => calendar !== null);
+  return results.filter(Boolean);
 }
 
 export function sortCalendars(calendars: any[]) {
@@ -121,3 +135,20 @@ export const isOverlapping = (
   bookedStartTime: number,
   bookedEndTime: number
 ) => requestedStartTime < bookedEndTime && bookedStartTime < requestedEndTime;
+
+export function pickWeightedRandomCalendar(calendars: Calendar[]) {
+  const ticketMultiplier = 100;
+
+  const weightedList = calendars.flatMap((calendar) => {
+    const spend_amount = Number(
+      calendar[SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS][0][
+        GHL_ACCOUNT_DETAILS.SPEND_AMOUNT
+      ]
+    );
+    const tickets = Math.floor(spend_amount / ticketMultiplier);
+    return Array(tickets).fill(calendar);
+  });
+
+  const randomIndex = Math.floor(Math.random() * weightedList.length);
+  return weightedList[randomIndex];
+}

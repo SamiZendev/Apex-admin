@@ -30,6 +30,7 @@ import {
 import {
   checkCalendarByUtmParams,
   getBookedSlots,
+  pickWeightedRandomCalendar,
   sortCalendars,
 } from "../utils/calendar/filter";
 import { AccountDetails } from "../types/interfaces";
@@ -426,11 +427,11 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
       })
     );
     const calendarSlots = sortCalendars(calendarsWithSlot.filter(Boolean));
-
+    const selectedCalendar = pickWeightedRandomCalendar(calendarSlots);
     return res.status(200).json({
       success: true,
       message: "Calendars fetched successfully",
-      calendar: calendarSlots[0],
+      calendar: selectedCalendar,
     });
   } catch (error) {
     console.error("Error fetching data:", error);
