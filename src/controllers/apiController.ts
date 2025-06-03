@@ -25,7 +25,6 @@ import {
 import {
   filterAvailableGhlCalendars,
   GhlAppointmentBooking,
-  openGhlCalendar,
 } from "../utils/calendar/ghlCalendar";
 import {
   checkCalendarByUtmParams,
@@ -33,7 +32,6 @@ import {
   pickWeightedRandomCalendar,
   sortCalendars,
 } from "../utils/calendar/filter";
-import { AccountDetails } from "../types/interfaces";
 import { filterAvailableCalendlyCalendars } from "../utils/calendar/calendlyCalendar";
 import {
   fetchAndSaveOncehubCalendarBookedSlot,
@@ -270,42 +268,8 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
         .json({ success: false, data: { error, calendars } });
     }
 
-    const calendlyCalendars = calendars.filter((calendar) =>
-      calendar.ghl_account_details?.some(
-        (account: AccountDetails) =>
-          account.ghl_subaccount_auth?.source === ACCOUNT_SOURCE.CALENDLY
-      )
-    );
-
-    const oncehubCalendars = calendars.filter((calendar) =>
-      calendar.ghl_account_details?.some(
-        (account: AccountDetails) =>
-          account.ghl_subaccount_auth?.source === ACCOUNT_SOURCE.ONCEHUB
-      )
-    );
-
-    const ghlCalendars = calendars.filter((calendar) =>
-      calendar.ghl_account_details?.some(
-        (account: AccountDetails) =>
-          account.ghl_subaccount_auth?.source === ACCOUNT_SOURCE.GHL
-      )
-    );
-
-    const availableGhlCalendars = openGhlCalendar(
-      ghlCalendars,
-      userStartUTC,
-      userEndUTC,
-      selectedDay
-    );
-
-    const combinedCalendars = [
-      ...calendlyCalendars,
-      ...availableGhlCalendars,
-      ...oncehubCalendars,
-    ];
-
     const eligibleCalendars = await checkCalendarByUtmParams(
-      combinedCalendars,
+      calendars,
       utmParams,
       matchedStateIds,
       shouldCheckState

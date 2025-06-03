@@ -9,6 +9,7 @@ export const SUPABASE_TABLE_NAME = {
   TIMEZONE: "timezone",
   UTM_PARAMETERS: "utm_parameters",
   STATES: "states",
+  STYLE_CONFIGURATIONS: "style_configurations",
 } as const;
 
 export const GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE = {

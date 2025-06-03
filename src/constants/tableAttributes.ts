@@ -33,6 +33,7 @@ export const GHL_ACCOUNT_DETAILS = {
   ID: "id",
   CALENDLY_SLUG: "calendly_slug",
   CALENDLY_SCHEDULING_URL: "calendly_scheduling_url",
+  UPDATED_AT: "updated_at",
 } as const;
 
 export const CALENDAR_DATA = {
@@ -105,3 +106,12 @@ export const STATES = {
   STATE: "state",
   STATE_ABBREVIATION: "state_abbreviation",
 } as const;
+
+export const STYLE_CONFIGURATIONS = {
+  ID: "id",
+  EMAIL: "email",
+  BG_COLOR: "bgColor",
+  FONT_SIZE: "fontSize",
+  CREATED_AT: "is_active",
+  UPDATED_AT: "updated_at",
+};

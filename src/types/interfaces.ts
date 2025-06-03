@@ -148,3 +148,9 @@ export interface OncehubWebhookData {
     booking_calendar: string;
   };
 }
+
+export interface StyleConfig {
+  email: string;
+  bgColor: string;
+  fontSize: number;
+}

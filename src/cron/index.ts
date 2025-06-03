@@ -3,7 +3,10 @@ import {
   GHL_ACCOUNT_DETAILS,
   GHL_SUBACCOUNT_AUTH_ATTRIBUTES,
 } from "../constants/tableAttributes";
-import { fetchAndSaveCalendarInformation } from "../controllers/ghlController";
+import {
+  fetchAndSaveCalendarInformation,
+  fetchSubaccountInformation,
+} from "../controllers/ghlController";
 import { supabase } from "../services/supabaseClient";
 import { ACCOUNT_SOURCE, SUPABASE_TABLE_NAME } from "../utils/constant";
 import { logErrorToFile } from "../utils/logger";
@@ -40,6 +43,19 @@ export const updateCalendarConfiguration = () => {
             account[GHL_ACCOUNT_DETAILS.GHL_CALENDAR_ID],
             account[GHL_ACCOUNT_DETAILS.GHL_ID]
           );
+          const subaccount = await fetchSubaccountInformation(
+            account[GHL_ACCOUNT_DETAILS.GHL_ID]
+          );
+          const accountDetails = {
+            [GHL_ACCOUNT_DETAILS.GHL_LOCATION_TIMEZONE]:
+              subaccount?.location?.timezone || "UTC",
+            [GHL_ACCOUNT_DETAILS.UPDATED_AT]: new Date().toISOString(),
+          };
+          const { data, error } = await supabase
+            .from(SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS)
+            .update(accountDetails)
+            .eq(GHL_ACCOUNT_DETAILS.GHL_ID, account[GHL_ACCOUNT_DETAILS.GHL_ID])
+            .select();
         } else if (
           account[SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE]?.[
             GHL_SUBACCOUNT_AUTH_ATTRIBUTES.SOURCE

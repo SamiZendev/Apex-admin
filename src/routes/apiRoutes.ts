@@ -18,6 +18,10 @@ import {
   getUTMById,
   updateUTM,
 } from "../controllers/utmController";
+import {
+  getStyleConfiguration,
+  saveStyleConfiguration,
+} from "../controllers/styleController";
 
 const router = express.Router();
 
@@ -36,5 +40,7 @@ router.put("/utm/:id", updateUTM);
 router.delete("/utm/:id", deleteUTM);
 router.delete("/account/:id", deleteAccount);
 router.get("/states", getStates);
+router.post("/configurations", saveStyleConfiguration);
+router.get("/getConfigurations", getStyleConfiguration);
 
 export default router;
