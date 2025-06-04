@@ -118,7 +118,7 @@ export const GhlAppointmentBooking = async (data: {
   firstName: string;
   lastName: string;
   email: string;
-  phone: string;
+  phoneNumber: string;
   startTime: string;
   endTime: string;
   locationId: string;
@@ -129,7 +129,7 @@ export const GhlAppointmentBooking = async (data: {
       firstName,
       lastName,
       email,
-      phone,
+      phoneNumber,
       startTime,
       endTime,
       locationId,
@@ -155,7 +155,7 @@ export const GhlAppointmentBooking = async (data: {
         firstName: firstName,
         lastName: lastName || "",
         email: email,
-        phone: phone,
+        phone: phoneNumber,
         locationId: locationId,
         source: process.env.GHL_APP_NAME as string,
         customFields: [

@@ -27,6 +27,12 @@ export const initiateCalendlyAuth = (req: Request, res: Response) => {
 };
 
 export const calendlyCallback = async (req: Request, res: Response) => {
+  const { error, error_description } = req.query;
+  if (error) {
+    return res.redirect(
+      `${process.env.REDIRECT_URL}/dashboard?status=error&error_description=${error_description}`
+    );
+  }
   try {
     const calendlyData = qs.stringify({
       grant_type: "authorization_code",
@@ -131,7 +137,7 @@ export const calendlyCallback = async (req: Request, res: Response) => {
     }
   } catch (error) {
     console.error("Error during Calendly authentication:", error);
-    return res.status(500).json({ error: "Authentication failed" });
+    return res.redirect(process.env.REDIRECT_URL as string);
   }
 };
 
