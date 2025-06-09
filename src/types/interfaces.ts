@@ -97,6 +97,7 @@ export interface Calendar {
   id: string;
   name: string;
   ghl_location_id: string;
+  calendar_id: string;
   calendar_open_hours: OpenHours[];
   calendar_team_members: TeamMembers[];
   ghl_account_details: AccountDetails[];

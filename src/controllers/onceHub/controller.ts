@@ -16,6 +16,7 @@ import {
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import duration from "dayjs/plugin/duration";
+import { logger } from "../../utils/logger";
 
 dayjs.extend(utc);
 dayjs.extend(duration);
@@ -359,6 +360,15 @@ export const getAvailableTimeSlotsForBookingCalendar = async (
         },
       }
     );
+
+    logger.info({
+      message: "Available time slots fetched successfully",
+      calendarId,
+      startTime,
+      endTime,
+      data: response.data,
+    });
+
     return { success: true, data: response.data };
   } catch (error: any) {
     console.error("Oncehub API error:", error.response?.data || error.message);

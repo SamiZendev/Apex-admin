@@ -1,11 +1,13 @@
 import { supabase } from "../../services/supabaseClient";
 import {
   CALENDAR_BOOKED_SLOTS,
+  CALENDAR_DATA,
   GHL_ACCOUNT_DETAILS,
   UTM_PARAMETERS,
 } from "../../constants/tableAttributes";
 import { SUPABASE_TABLE_NAME } from "../constant";
 import { BookedSlots, Calendar } from "../../types/interfaces";
+import { logger } from "../logger";
 
 export async function checkCalendarByUtmParams(
   calendars: any[],
@@ -26,12 +28,18 @@ export async function checkCalendarByUtmParams(
         accountDetails[GHL_ACCOUNT_DETAILS.CONDITION] || "AND"
       ).toUpperCase();
 
+      logger.info({
+        message: "Checking calendar inclusion",
+        calendarStateIds,
+        assetMinimumRaw,
+        condition,
+      });
+
       let assetMatch = true;
 
       if (assetMinimumRaw && assetMinimumRaw.includes(":")) {
         const [utmKeyId, minValueStr] = assetMinimumRaw.split(":");
         const minValue = parseFloat(minValueStr);
-
         if (utmKeyId && !isNaN(minValue)) {
           const { data, error } = await supabase
             .from(SUPABASE_TABLE_NAME.UTM_PARAMETERS)
@@ -39,24 +47,19 @@ export async function checkCalendarByUtmParams(
             .eq(UTM_PARAMETERS.ID, utmKeyId)
             .single();
 
-          if (error || !data) {
-            console.warn("UTM parameter not found for ID:", utmKeyId);
-            assetMatch = false;
-          } else {
+          if (!error) {
             const dynamicKey = data[UTM_PARAMETERS.UTM_PARAMETER];
             const utmValue = parseFloat(utmParams[dynamicKey]);
-
+            logger.info({
+              message: "Utm value check",
+              dynamicKey,
+              utmValue,
+              minValue,
+            });
             if (!isNaN(utmValue)) {
               assetMatch = utmValue >= minValue;
-              console.log(
-                `UTM Value: ${utmValue}, Min Required: ${minValue}, Match: ${assetMatch}`
-              );
-            } else {
-              assetMatch = false;
             }
           }
-        } else {
-          assetMatch = false;
         }
       }
 
@@ -68,9 +71,16 @@ export async function checkCalendarByUtmParams(
         condition === "AND"
           ? stateMatch && assetMatch
           : stateMatch || assetMatch;
-      console.log(
-        `Calendar ID: ${calendar.id}, State Match: ${stateMatch}, Asset Match: ${assetMatch}, Condition: ${condition}, Should Include: ${shouldInclude}`
-      );
+
+      logger.info({
+        message: "Calendar inclusion result",
+        calendarId: calendar[CALENDAR_DATA.CALENDAR_ID],
+        locationId: calendar[CALENDAR_DATA.GHL_LOCATION_ID],
+        shouldInclude,
+        stateMatch,
+        assetMatch,
+      });
+
       return shouldInclude ? calendar : null;
     })
   );
@@ -150,5 +160,14 @@ export function pickWeightedRandomCalendar(calendars: Calendar[]) {
   });
 
   const randomIndex = Math.floor(Math.random() * weightedList.length);
+
+  logger.info({
+    message: "Weighted calendar selection",
+    totalCalendars: calendars.length,
+    weightedListLength: weightedList.length,
+    weightedList,
+    randomIndex,
+  });
+
   return weightedList[randomIndex];
 }

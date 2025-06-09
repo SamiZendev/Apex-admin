@@ -1,6 +1,7 @@
 import { CALENDAR_DATA } from "../../constants/tableAttributes";
 import { AccountDetails, BookedSlots, Calendar } from "../../types/interfaces";
 import { ACCOUNT_SOURCE } from "../constant";
+import { logger } from "../logger";
 import { isOverlapping } from "./filter";
 
 export function filterAvailableCalendlyCalendars(
@@ -31,6 +32,16 @@ export function filterAvailableCalendlyCalendars(
           slot?.end_time
         )
       );
+
+      logger.info({
+        message: "Checking member availability Calendly",
+        isBusy,
+        requestedStart,
+        requestedEnd,
+        bookedSlots: memberBookings?.length || 0,
+        calendarId: calendar[CALENDAR_DATA.CALENDAR_ID],
+        locationId: calendar[CALENDAR_DATA.GHL_LOCATION_ID],
+      });
 
       return isBusy ? null : calendar;
     })

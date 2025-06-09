@@ -42,6 +42,7 @@ import {
   filterAvailableOncehubCalendars,
   OnceHubAppointmentBooking,
 } from "../utils/calendar/onceHubCalendar";
+import { logger } from "../utils/logger";
 
 dayjs.extend(customParseFormat);
 dayjs.extend(utc);
@@ -217,7 +218,6 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
     }
     const userStartUTC = dayjs(startTime).utc();
     const userEndUTC = dayjs(endTime).utc();
-    const selectedDay = userStartUTC.day();
     const startUnix = dayjs(startTime).unix();
     const endUnix = dayjs(endTime).unix();
     const startDateMillis = dayjs.utc(userStartUTC).valueOf();
@@ -268,6 +268,24 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
         .json({ success: false, data: { error, calendars } });
     }
 
+    logger.info({
+      message:
+        "Fetching calendar and subaccount from database by booking appointment details",
+      startTime,
+      endTime,
+      utmParams,
+      userStartUTC,
+      userEndUTC,
+      startUnix,
+      endUnix,
+      startDateMillis,
+      endDateMillis,
+      bookingDate,
+      shouldCheckState,
+      bookingDuration,
+      calendars,
+    });
+
     const eligibleCalendars = await checkCalendarByUtmParams(
       calendars,
       utmParams,
@@ -279,7 +297,17 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
       (calendar) => calendar.calendar_id
     );
 
+    logger.info({
+      message: "Eligible calendars after checking UTM params",
+      availableCalendarIds,
+    });
+
     const bookedSlots = await getBookedSlots(availableCalendarIds);
+
+    logger.info({
+      message: "Booked slots fetched",
+      bookedSlots: bookedSlots.data,
+    });
 
     if (!bookedSlots.success || !bookedSlots.data) {
       return res
@@ -313,6 +341,15 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
       ...filteredGHLCalendars,
       ...filteredOncehubCalendars,
     ];
+
+    logger.info({
+      message: "Filtered calendars after checking availability",
+      filteredCalendars: filteredCalendars.map((cal) => ({
+        calendar_id: cal[CALENDAR_DATA.CALENDAR_ID],
+        ghl_location_id: cal[CALENDAR_DATA.GHL_LOCATION_ID],
+      })),
+    });
+
     const sortedCalendars = sortCalendars(filteredCalendars);
 
     const calendarsWithSlot = await Promise.all(
@@ -390,8 +427,9 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
         return null;
       })
     );
-    const calendarSlots = sortCalendars(calendarsWithSlot.filter(Boolean));
-    const selectedCalendar = pickWeightedRandomCalendar(calendarSlots);
+    const selectedCalendar = pickWeightedRandomCalendar(
+      calendarsWithSlot.filter(Boolean)
+    );
     return res.status(200).json({
       success: true,
       message: "Calendars fetched successfully",
