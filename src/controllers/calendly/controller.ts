@@ -12,6 +12,7 @@ import {
   updateData,
 } from "../../services/supabaseClient";
 import dayjs from "dayjs";
+import { logger } from "../../utils/logger";
 
 export const getCurrentUser = async (access_token: string) => {
   try {
@@ -249,6 +250,16 @@ export const getEventTypeAvailableTimes = async (
         },
       }
     );
+
+    logger.info({
+      message: "Fetched Calendly available times successfully",
+      data: response.data,
+      calendarId,
+      userId,
+      startTime,
+      endTime,
+    });
+
     return { success: true, data: response.data };
   } catch (error: any) {
     console.error("Calendly API error:", error.response?.data || error.message);

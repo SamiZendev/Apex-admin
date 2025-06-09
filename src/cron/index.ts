@@ -9,26 +9,33 @@ import {
 } from "../controllers/ghlController";
 import { supabase } from "../services/supabaseClient";
 import { ACCOUNT_SOURCE, SUPABASE_TABLE_NAME } from "../utils/constant";
-import { logErrorToFile } from "../utils/logger";
 import cron from "node-cron";
+import { logger } from "../utils/logger";
 
 export const updateCalendarConfiguration = () => {
   cron.schedule("0 0 * * *", async () => {
-    logErrorToFile("Updating calendar data");
+    logger.info({
+      message: "Running daily calendar configuration update",
+      timestamp: new Date().toISOString(),
+    });
     const { data: account_data, error } = await supabase
       .from(SUPABASE_TABLE_NAME.GHL_ACCOUNT_DETAILS)
       .select(`*,${SUPABASE_TABLE_NAME.GHL_SUBACCOUNT_AUTH_TABLE}(*)`);
 
     if (error) {
-      logErrorToFile(error, "Fetching calendar data");
+      logger.error({
+        message: "Error fetching calendar data",
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
       return;
     }
 
     if (!account_data) {
-      logErrorToFile(
-        new Error("No calendar data found"),
-        "Calendar data check"
-      );
+      logger.info({
+        message: "No calendar data found",
+        timestamp: new Date().toISOString(),
+      });
       return;
     }
 
@@ -67,12 +74,12 @@ export const updateCalendarConfiguration = () => {
           );
         }
       } catch (err) {
-        logErrorToFile(
-          err,
-          `Updating calendar for ${
-            account[GHL_ACCOUNT_DETAILS.GHL_CALENDAR_ID]
-          }`
-        );
+        logger.error({
+          message: "Error updating calendar configuration",
+          error: (err as Error).message,
+          accountId: account[GHL_ACCOUNT_DETAILS.GHL_ID],
+          timestamp: new Date().toISOString(),
+        });
       }
     }
   });

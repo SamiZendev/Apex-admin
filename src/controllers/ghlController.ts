@@ -27,6 +27,7 @@ import { Request, Response } from "express";
 import { AppointmentData, ContactData } from "../types/interfaces";
 import { DateTime } from "luxon";
 import dayjs from "dayjs";
+import { logger } from "../utils/logger";
 
 export const fetchAllCalendarsByLocationId = async (
   req: Request,
@@ -603,6 +604,16 @@ export const fetchCalendarAvailableSlots = async (
           params: { startDate, endDate, timezone },
         }
       );
+
+      logger.info({
+        message: "Fetched GHL available slots successfully",
+        calendarId,
+        locationId,
+        startDate,
+        endDate,
+        timezone,
+        data: response.data,
+      });
 
       return { success: true, data: response.data };
     }

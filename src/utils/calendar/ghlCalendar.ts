@@ -1,4 +1,5 @@
 import {
+  CALENDAR_DATA,
   CALENDAR_OPEN_HOURS,
   GHL_ACCOUNT_DETAILS,
 } from "../../constants/tableAttributes";
@@ -17,6 +18,7 @@ import {
   createGhlAppointment,
   createGhlContact,
 } from "../../controllers/ghlController";
+import { logger } from "../logger";
 
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
@@ -95,10 +97,21 @@ export function filterAvailableGhlCalendars(
             requestedStart,
             requestedEnd,
             slot?.start_time,
-            slot?.end_time
+            slot?.end_time,
           );
         });
-
+        
+        logger.info({
+          message: "Checking member availability GHL",
+          userId: member.user_id,
+          isBusy,
+          requestedStart,
+          requestedEnd,
+          bookedSlots: memberBookings?.length || 0,
+          calendarId: calendar[CALENDAR_DATA.CALENDAR_ID],
+          locationId: calendar[CALENDAR_DATA.GHL_LOCATION_ID],
+        })
+        
         return !isBusy;
       });
 

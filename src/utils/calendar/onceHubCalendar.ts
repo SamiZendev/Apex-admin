@@ -8,6 +8,7 @@ import { ACCOUNT_SOURCE, SUPABASE_TABLE_NAME } from "../constant";
 import { retrieveAccessToken } from "../helpers";
 import { isOverlapping } from "./filter";
 import { supabase } from "../../services/supabaseClient";
+import { logger } from "../logger";
 
 export function filterAvailableOncehubCalendars(
   calendars: Calendar[],
@@ -37,6 +38,16 @@ export function filterAvailableOncehubCalendars(
           slot?.end_time
         )
       );
+
+      logger.info({
+        message: "Checking member availability Oncehub",
+        isBusy,
+        requestedStart,
+        requestedEnd,
+        bookedSlots: memberBookings?.length || 0,
+        calendarId: calendar[CALENDAR_DATA.CALENDAR_ID],
+        locationId: calendar[CALENDAR_DATA.GHL_LOCATION_ID],
+      });
 
       return isBusy ? null : calendar;
     })
