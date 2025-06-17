@@ -9,6 +9,8 @@ import dotenv from "dotenv";
 import authRoutes from "./routes/authRoutes";
 import combinedRoutes from "./routes/combinedRoutes";
 import { updateCalendarConfiguration } from "./cron";
+import { prefetchCalendarSlots } from "./cron/prefetchCalendarSlots";
+import { deleteOldSlots } from "./cron/deleteOldSlotsCron";
 
 dotenv.config();
 const app = express();
@@ -34,6 +36,8 @@ app.get("/", (_req: Request, res: Response) => {
 });
 
 updateCalendarConfiguration();
+prefetchCalendarSlots();
+deleteOldSlots();
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);

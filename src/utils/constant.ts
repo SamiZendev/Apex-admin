@@ -10,6 +10,7 @@ export const SUPABASE_TABLE_NAME = {
   UTM_PARAMETERS: "utm_parameters",
   STATES: "states",
   STYLE_CONFIGURATIONS: "style_configurations",
+  CALENDAR_SLOTS: "calendar_slots",
 } as const;
 
 export const GHL_SUBACCOUNT_AUTH_ACCOUNT_TYPE = {
