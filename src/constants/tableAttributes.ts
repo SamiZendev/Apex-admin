@@ -115,3 +115,13 @@ export const STYLE_CONFIGURATIONS = {
   CREATED_AT: "is_active",
   UPDATED_AT: "updated_at",
 };
+
+export const CALENDAR_SLOTS = {
+  ID: "id",
+  CALENDAR_ID: "calendar_id",
+  LOCARION_ID: "location_id",
+  SLOT_DATETIME_UTC: "slot_datetime_utc",
+  TIMEZONE: "timezone",
+  DATE: "date",
+  SCHEDULING_URL: "scheduling_url",
+};
