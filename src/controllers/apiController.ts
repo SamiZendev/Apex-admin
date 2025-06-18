@@ -344,7 +344,7 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
       })),
     });
 
-    const { data: conflictingSlots, error: conflictError } = await supabase
+    const { data: matchingSlots, error: slotFetchError } = await supabase
       .from(SUPABASE_TABLE_NAME.CALENDAR_SLOTS)
       .select()
       .in(
@@ -353,27 +353,37 @@ export const getCalendarAndSubaccountByBookingAppointmentDetails = async (
       )
       .eq(CALENDAR_SLOTS.SLOT_DATETIME_UTC, userStartUTC.toISOString());
 
-    if (conflictError) {
+    if (slotFetchError) {
       return res.status(400).json({
         message: "Error fetching calendar slots for start time match",
-        error: conflictError,
+        error: slotFetchError,
       });
     }
 
-    if (conflictingSlots?.length > 0) {
-      const conflictingCalendarIds = new Set(
-        conflictingSlots.map((slot) => slot.calendar_id)
+    if (matchingSlots?.length > 0) {
+      const matchingSlotsCalendarIds = new Set(
+        matchingSlots.map((slot) => slot.calendar_id)
       );
-      const finalAvailableCalendars = filteredCalendars.filter(
-        (calendar) => !conflictingCalendarIds.has(calendar.calendar_id)
+
+      const availableCalendars = filteredCalendars.filter((calendar) =>
+        matchingSlotsCalendarIds.has(calendar.calendar_id)
       );
-      const selectedCalendar = pickWeightedRandomCalendar(
-        finalAvailableCalendars
+
+      const selectedCalendar = pickWeightedRandomCalendar(availableCalendars);
+
+      const matchedCalendar = matchingSlots.find(
+        (slot) => slot.calendar_id === selectedCalendar?.calendar_id
       );
+
       return res.status(200).json({
         success: true,
         message: "Calendars fetched successfully",
-        calendar: selectedCalendar,
+        calendar: {
+          ...selectedCalendar,
+          matched_slot: {
+            scheduling_url: matchedCalendar?.scheduling_url,
+          },
+        },
       });
     }
 
